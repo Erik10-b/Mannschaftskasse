@@ -132,7 +132,7 @@ body.role-strafen .ausgaben-only { display: none !important; }
 body.role-getraenke .strafen-only { display: none !important; }
 body.role-getraenke .ausgaben-only { display: none !important; }
 /* ════════════════════════════════════════════════════════
-   MOBILE — komplette Überarbeitung
+   MOBILE — komplette Überarbeitung v2
    ════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
 
@@ -145,18 +145,18 @@ body.role-getraenke .ausgaben-only { display: none !important; }
         gap: 0;
         height: auto;
         min-height: 100vh;
-        padding-bottom: 80px;
         overflow: visible;
     }
 
-    /* ════ SIDEBAR → kompakte Header-Leiste ════ */
+    /* ════ SIDEBAR → Header-Leiste ════ */
     .sidebar {
         width: 100%;
         height: auto;
+        min-height: 56px;
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
-        padding: 10px 16px;
+        padding: 10px 14px;
         border-radius: 0;
         border-bottom: 1px solid var(--glass-border);
         position: sticky;
@@ -165,67 +165,61 @@ body.role-getraenke .ausgaben-only { display: none !important; }
         background: rgba(12, 20, 38, 0.97);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        gap: 12px;
+        gap: 10px;
+        overflow: visible;
     }
     .sidebar-header {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         flex: 1;
         min-width: 0;
+        overflow: visible;
     }
     .sidebar-header h2 {
-        font-size: 1rem;
+        font-size: 0.95rem;
         margin-bottom: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        -webkit-text-fill-color: unset;
+        background: none;
+        color: #60a5fa;
     }
-    .sidebar-logo { width: 32px; margin: 0; flex-shrink: 0; }
+    .sidebar-logo { width: 34px; height: 34px; margin: 0; flex-shrink: 0; object-fit: cover; border-radius: 50%; }
 
-    /* ════ NAVIGATION → fixierte Bottom-Bar ════ */
-    .nav-links {
-        position: fixed;
-        bottom: 0; left: 0; right: 0;
-        z-index: 200;
-        display: flex;
-        flex-direction: row;
-        background: rgba(10, 17, 32, 0.98);
-        backdrop-filter: blur(24px);
-        -webkit-backdrop-filter: blur(24px);
-        border-top: 1px solid rgba(255,255,255,0.08);
-        padding: 4px 4px max(8px, env(safe-area-inset-bottom));
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        gap: 2px;
-    }
-    .nav-links::-webkit-scrollbar { display: none; }
-    .nav-links li {
-        flex: 1;
-        min-width: 50px;
-        max-width: 80px;
-        padding: 5px 2px;
-        border-radius: 10px;
-        flex-direction: column;
+    /* ════ NAV-LINKS → verbergen, wird durch Hamburger-Drawer ersetzt ════ */
+    .nav-links { display: none !important; }
+
+    /* ── Hamburger Button ── */
+    #mobile-hamburger {
+        display: flex !important;
         align-items: center;
         justify-content: center;
-        gap: 2px;
-        margin: 0;
-        transition: background 0.15s;
+        width: 40px;
+        height: 40px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid var(--glass-border);
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 1.3rem;
+        flex-shrink: 0;
+        touch-action: manipulation;
     }
-    .nav-links li .icon { font-size: 1.25rem; line-height: 1.2; }
-    .nav-links li .text {
-        display: block;
-        font-size: 0.55rem;
-        font-weight: 600;
-        opacity: 0.65;
-        letter-spacing: 0.1px;
-        text-align: center;
+
+    /* ── Kassenstand Badge in Header ── */
+    #mobile-fund-badge {
+        display: flex !important;
+        align-items: center;
+        gap: 6px;
+        background: rgba(16,185,129,0.12);
+        border: 1px solid rgba(16,185,129,0.25);
+        border-radius: 8px;
+        padding: 5px 10px;
+        flex-shrink: 0;
     }
-    .nav-links li.active { background: rgba(59,130,246,0.2); }
-    .nav-links li.active .text { opacity: 1; color: #93c5fd; }
-    .nav-links li.active .icon { filter: brightness(1.3); }
+    #mobile-fund-badge span { font-size: 0.72rem; color: var(--text-muted); }
+    #mobile-fund-badge strong { font-size: 0.95rem; color: var(--success); font-weight: 700; }
 
     /* ════ MAIN CONTENT ════ */
     .main-content {
@@ -235,21 +229,8 @@ body.role-getraenke .ausgaben-only { display: none !important; }
         padding: 0;
     }
 
-    /* ── Top-Bar (Kassenstand-Leiste) ── */
-    .top-bar {
-        border-radius: 0;
-        padding: 10px 16px;
-        flex-wrap: wrap;
-        gap: 6px;
-        border-bottom: 1px solid var(--glass-border);
-    }
-    .top-bar h1 { font-size: 0.9rem; color: var(--text-muted); font-weight: 400; }
-    .kassenstand { gap: 8px; }
-    .kassenstand span { font-size: 0.85rem; }
-    .kassenstand strong { font-size: 1.4rem; }
-    /* PDF + Status Badge kleiner */
-    .top-bar .btn { padding: 6px 10px; font-size: 0.8rem; }
-    #status-badge { font-size: 0.72rem; padding: 4px 8px; }
+    /* ── Top-Bar auf Mobile verstecken (Kassenstand ist im Sidebar-Header) ── */
+    .top-bar { display: none; }
 
     /* ── Content-Sections ── */
     .content-sections {
@@ -305,13 +286,17 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 
     /* ── Duell ── */
     #duel-container {
-        gap: 10px;
+        gap: 6px;
         padding: 4px 0;
+        flex-wrap: nowrap;
+        align-items: flex-start;
     }
-    .duel-card-wrap { gap: 10px; }
-    .duel-vote-btn { width: 140px; font-size: 0.8rem; padding: 9px 8px; }
-    .duel-result-bar { width: 140px; }
-    .duel-vs { font-size: 1.3rem; align-self: center; }
+    .duel-card-wrap { gap: 8px; flex: 1; min-width: 0; align-items: center; }
+    .duel-card-scaled { transform: scale(0.5); transform-origin: top center; margin-bottom: -155px; }
+    .duel-vote-btn { width: 100%; font-size: 0.75rem; padding: 8px 4px; }
+    .duel-result-bar { width: 100%; }
+    .duel-result-pct { font-size: 0.7rem; }
+    .duel-vs { font-size: 1.1rem; align-self: center; flex-shrink: 0; padding-top: 30px; }
 
     /* ── Modals → Sheet von unten ── */
     .modal { align-items: flex-end; padding: 0; }
@@ -347,7 +332,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 
     /* ── Diverses ── */
     #sync-indicator { display: none; }
-    #auth-logout-btn { bottom: 88px; left: 12px; font-size: 0.7rem; }
+    #auth-logout-btn { bottom: 16px; left: 12px; font-size: 0.7rem; }
 }
 
 /* ── Extra kleine Phones (< 390px) ── */
@@ -454,13 +439,19 @@ body.role-getraenke .ausgaben-only { display: none !important; }
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1px 0;
-    padding: 2px 10px 8px;
+    padding: 2px 8px 8px;
 }
 .ut-card-stat {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 4px;
+    padding: 0 4px;
+}
+/* Left column (odd items) align left, right column (even items) align left too but with left padding */
+.ut-card-stat:nth-child(even) {
+    border-left: 1px solid rgba(0,0,0,0.1);
+    padding-left: 8px;
 }
 .ut-card-stat-val {
     font-size: 0.82rem;
@@ -538,6 +529,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 /* ═══ DUELL ═══ */
 .duel-vs { font-size: 2rem; font-weight: 900; color: var(--text-muted); text-align: center; flex-shrink: 0; }
 .duel-card-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.duel-card-scaled { transform: scale(0.82); transform-origin: top center; margin-bottom: -56px; }
 .duel-attr { font-size: 0.82rem; color: #fbbf24; text-align: center; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
 .duel-vote-btn { width: 200px; padding: 10px; font-size: 0.9rem; font-weight: 700; border-radius: 10px; border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease; background: rgba(255,255,255,0.08); color: var(--text-main); font-family: var(--font-family); }
 .duel-vote-btn:hover { background: rgba(255,255,255,0.18); transform: translateY(-2px); }
@@ -845,6 +837,20 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                     <div id="status-badge" class="readonly">👁️ Nur lesen</div>
                 </div>
             </header>
+
+            <!-- Mobile Hamburger Overlay Nav -->
+            <div id="mobile-nav-overlay" onclick="window.closeMobileNav()" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:150; backdrop-filter:blur(4px);"></div>
+            <div id="mobile-nav-drawer" style="display:none; position:fixed; top:0; left:0; bottom:0; width:72%; max-width:280px; background:rgba(12,20,38,0.99); z-index:160; flex-direction:column; padding:20px 12px; gap:8px; overflow-y:auto; backdrop-filter:blur(20px); border-right:1px solid var(--glass-border);">
+                <div style="display:flex; align-items:center; gap:10px; padding:8px 4px 20px; border-bottom:1px solid var(--glass-border); margin-bottom:8px;">
+                    <img src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD" alt="" style="width:36px; border-radius:50%;" onerror="this.style.display='none'">
+                    <div>
+                        <div style="font-size:1rem; font-weight:700; color:#60a5fa;">FC Stern</div>
+                        <div id="mobile-nav-status" style="font-size:0.72rem; color:var(--text-muted);">Lädt...</div>
+                    </div>
+                    <button onclick="window.closeMobileNav()" style="margin-left:auto; background:none; border:none; color:var(--text-muted); font-size:1.4rem; cursor:pointer; padding:4px;">✕</button>
+                </div>
+                <div id="mobile-nav-links"></div>
+            </div>
 
             <div class="content-sections">
 
@@ -1345,6 +1351,37 @@ body.role-getraenke .ausgaben-only { display: none !important; }
         </div>
     </div>
 
+
+    <!-- Game Stats Modal -->
+    <div id="modal-game-stats" class="modal hidden glass-panel">
+        <div class="modal-content glass-panel card" style="max-width:560px; max-height:92vh; overflow-y:auto;">
+            <h2 id="game-stats-title">⚽ Spieldetails</h2>
+            <input type="hidden" id="game-stats-id">
+
+            <!-- Torschützen -->
+            <div style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h3 style="margin:0; font-size:1rem;">⚽ Tore</h3>
+                    <button class="btn btn-outline btn-small" onclick="window.addGoalRow()">+ Tor hinzufügen</button>
+                </div>
+                <div id="goals-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <!-- Karten -->
+            <div style="margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h3 style="margin:0; font-size:1rem;">🟨 Karten</h3>
+                    <button class="btn btn-outline btn-small" onclick="window.addCardRow()">+ Karte hinzufügen</button>
+                </div>
+                <div id="cards-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModals()">Schließen</button>
+                <button type="button" class="btn btn-primary" onclick="window.saveGameStats()">💾 Speichern</button>
+            </div>
+        </div>
+    </div>
 
     <!-- UT Card Edit Modal -->
     <div id="modal-ut-card" class="modal hidden glass-panel">
@@ -3730,8 +3767,12 @@ function renderGames() {
                     ${game.result ? `<span style="margin-left:10px; font-size:0.9rem; color:var(--success); font-weight:700;">${game.result}</span>` : ''}
                     <br><span style="font-size:0.82rem; color:var(--text-muted);">${new Date(game.date).toLocaleDateString('de-DE')}</span>
                 </div>
-                <span class="edit-only"><button class="btn btn-danger btn-small" onclick="window.deleteGame('${game.id}')">🗑️</button></span>
+                <div style="display:flex;gap:6px;" class="edit-only">
+                    <button class="btn btn-outline btn-small" onclick="window.openGameStats('${game.id}')">📊 Details</button>
+                    <button class="btn btn-danger btn-small" onclick="window.deleteGame('${game.id}')">🗑️</button>
+                </div>
             </div>
+            ${_renderGameStatsInline(game)}
             ${mvpSection}
         </div>`;
     }).join('');
@@ -3914,7 +3955,7 @@ function renderDuel() {
 
     container.innerHTML = `
         <div class="duel-card-wrap">
-            <div style="transform:scale(0.82); transform-origin:top center; margin-bottom:${0.82*310 - 310}px;">${cardHtmlA}</div>
+            <div class="duel-card-scaled">${cardHtmlA}</div>
             <div class="duel-attr">${attr.icon} ${attr.label}: ${valA}</div>
             ${voted ? `
                 <div class="duel-result-bar"><div class="duel-result-fill" style="width:${pctA}%"></div></div>
@@ -3929,7 +3970,7 @@ function renderDuel() {
         <div class="duel-vs">VS</div>
 
         <div class="duel-card-wrap">
-            <div style="transform:scale(0.82); transform-origin:top center; margin-bottom:${0.82*310 - 310}px;">${cardHtmlB}</div>
+            <div class="duel-card-scaled">${cardHtmlB}</div>
             <div class="duel-attr">${attr.icon} ${attr.label}: ${valB}</div>
             ${voted ? `
                 <div class="duel-result-bar"><div class="duel-result-fill" style="width:${pctB}%"></div></div>
@@ -3950,6 +3991,158 @@ function renderDuel() {
         container.appendChild(next);
     }
 }
+
+// ══════════════════════════════════════════════════════════════
+// SPIELDETAILS — Tore, Assists, Karten
+// ══════════════════════════════════════════════════════════════
+
+function _renderGameStatsInline(game) {
+    const goals = game.goals || [];
+    const cards = game.cards || [];
+    if (goals.length === 0 && cards.length === 0) return '';
+
+    const cardIcon = { yellow: '🟨', yellowred: '🟨🔴', red: '🔴' };
+    const playerName = id => {
+        const p = state.players.find(p => p.id === id);
+        return p ? p.name.split(' ').pop() : '?';
+    };
+
+    let html = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--glass-border); display:flex; flex-wrap:wrap; gap:6px 16px;">';
+
+    goals.forEach(g => {
+        html += `<span style="font-size:0.82rem;">⚽ <strong>${playerName(g.scorerId)}</strong>`;
+        if (g.assistId) html += ` <span style="color:var(--text-muted);">(🎯 ${playerName(g.assistId)})</span>`;
+        if (g.minute) html += ` <span style="color:var(--text-muted);">${g.minute}'</span>`;
+        html += '</span>';
+    });
+
+    cards.forEach(c => {
+        html += `<span style="font-size:0.82rem;">${cardIcon[c.type] || '🟨'} <strong>${playerName(c.playerId)}</strong>`;
+        if (c.minute) html += ` <span style="color:var(--text-muted);">${c.minute}'</span>`;
+        html += '</span>';
+    });
+
+    html += '</div>';
+    return html;
+}
+
+window.openGameStats = function(gameId) {
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    document.getElementById('game-stats-id').value = gameId;
+    document.getElementById('game-stats-title').textContent = `⚽ vs. ${game.opponent} — Details`;
+    _renderGoalRows(game.goals || []);
+    _renderCardRows(game.cards || []);
+    document.getElementById('modal-game-stats').classList.remove('hidden');
+};
+
+function _playerOptions(selectedId = '') {
+    return '<option value="">– Spieler –</option>' +
+        [...state.players].sort((a,b) => a.name.localeCompare(b.name))
+            .map(p => `<option value="${p.id}" ${p.id === selectedId ? 'selected' : ''}>${p.name}</option>`)
+            .join('');
+}
+
+function _renderGoalRows(goals) {
+    const container = document.getElementById('goals-list');
+    if (!container) return;
+    if (goals.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Tore eingetragen.</p>';
+        return;
+    }
+    container.innerHTML = goals.map((g, i) => `
+        <div class="game-stat-row" data-index="${i}" style="display:grid; grid-template-columns:1fr 1fr 60px 36px; gap:6px; align-items:center;">
+            <select class="goal-scorer" onchange="window._goalChanged(${i},'scorerId',this.value)">${_playerOptions(g.scorerId)}</select>
+            <select class="goal-assist" onchange="window._goalChanged(${i},'assistId',this.value)">
+                <option value="">– kein Assist –</option>
+                ${[...state.players].sort((a,b) => a.name.localeCompare(b.name))
+                    .map(p => `<option value="${p.id}" ${p.id === g.assistId ? 'selected' : ''}>${p.name}</option>`).join('')}
+            </select>
+            <input type="number" min="1" max="120" placeholder="Min" value="${g.minute || ''}"
+                onchange="window._goalChanged(${i},'minute',this.value)"
+                style="padding:8px 6px; font-size:0.85rem;">
+            <button class="btn btn-danger btn-small" onclick="window._removeGoal(${i})" style="padding:6px 8px;">✕</button>
+        </div>`).join('');
+}
+
+window._tempGoals = [];
+window._tempCards = [];
+
+window.addGoalRow = function() {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    if (!game.goals) game.goals = [];
+    game.goals.push({ scorerId: '', assistId: '', minute: '' });
+    _renderGoalRows(game.goals);
+};
+
+window._goalChanged = function(idx, field, val) {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game || !game.goals[idx]) return;
+    game.goals[idx][field] = val;
+};
+
+window._removeGoal = function(idx) {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    game.goals.splice(idx, 1);
+    _renderGoalRows(game.goals);
+};
+
+function _renderCardRows(cards) {
+    const container = document.getElementById('cards-list');
+    if (!container) return;
+    if (cards.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Karten eingetragen.</p>';
+        return;
+    }
+    container.innerHTML = cards.map((c, i) => `
+        <div style="display:grid; grid-template-columns:1fr 120px 60px 36px; gap:6px; align-items:center;">
+            <select onchange="window._cardChanged(${i},'playerId',this.value)">${_playerOptions(c.playerId)}</select>
+            <select onchange="window._cardChanged(${i},'type',this.value)">
+                <option value="yellow"  ${c.type==='yellow'    ?'selected':''}>🟨 Gelb</option>
+                <option value="yellowred" ${c.type==='yellowred'?'selected':''}>🟨🔴 Gelb-Rot</option>
+                <option value="red"     ${c.type==='red'       ?'selected':''}>🔴 Rot</option>
+            </select>
+            <input type="number" min="1" max="120" placeholder="Min" value="${c.minute || ''}"
+                onchange="window._cardChanged(${i},'minute',this.value)"
+                style="padding:8px 6px; font-size:0.85rem;">
+            <button class="btn btn-danger btn-small" onclick="window._removeCard(${i})" style="padding:6px 8px;">✕</button>
+        </div>`).join('');
+}
+
+window.addCardRow = function() {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    if (!game.cards) game.cards = [];
+    game.cards.push({ playerId: '', type: 'yellow', minute: '' });
+    _renderCardRows(game.cards);
+};
+
+window._cardChanged = function(idx, field, val) {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game || !game.cards[idx]) return;
+    game.cards[idx][field] = val;
+};
+
+window._removeCard = function(idx) {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    game.cards.splice(idx, 1);
+    _renderCardRows(game.cards);
+};
+
+window.saveGameStats = function() {
+    hideAllModals();
+    saveState();
+    renderGames();
+};
 
     </script>
 </body>
