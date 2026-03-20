@@ -1408,7 +1408,8 @@ function _applyRoleAndShow(role, playerId) {
     const mkNav = document.getElementById('nav-meinkonto');
     if (mkNav) mkNav.style.display = playerId ? '' : 'none';
 
-    loadState();
+    if (typeof loadState === 'function') loadState();
+    else window.addEventListener('load', () => loadState());
 }
 
 // Alias für alten Code der _applyRole aufruft
