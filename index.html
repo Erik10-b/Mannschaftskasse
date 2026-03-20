@@ -3402,6 +3402,8 @@ function utMvpCountdown(deadline) {
     if (h >= 1)  return `${h}h ${m}m`;
     return `${m} Minute${m !== 1 ? 'n' : ''}`;
 }
+
+function getMvpWinner(gameId) {
     if (!state.mvpVotes || !state.mvpVotes[gameId]) return null;
     const votes = state.mvpVotes[gameId].votes || {};
     if (Object.keys(votes).length === 0) return null;
