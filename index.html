@@ -376,13 +376,14 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 .ut-card-stats {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1px 10px;
-    padding: 2px 12px 8px;
+    gap: 1px 0;
+    padding: 2px 10px 8px;
 }
 .ut-card-stat {
     display: flex;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    gap: 4px;
 }
 .ut-card-stat-val {
     font-size: 0.82rem;
@@ -802,13 +803,15 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                             <ul id="dash-top-drink-debt" class="debtors-list"></ul>
                         </div>
                     </div>
-                    <div class="card glass-panel summary-card">
-                        <h3>📉 Letzte Ausgaben</h3>
-                        <ul id="dash-recent-expenses" class="activity-list"></ul>
-                    </div>
-                    <div class="card glass-panel summary-card">
-                        <h3>🏆 MVP Abstimmungen</h3>
-                        <div id="dash-mvp-votes"></div>
+                    <div class="dashboard-grid" style="margin-top:0;">
+                        <div class="card glass-panel summary-card">
+                            <h3>📉 Letzte Ausgaben</h3>
+                            <ul id="dash-recent-expenses" class="activity-list"></ul>
+                        </div>
+                        <div class="card glass-panel summary-card">
+                            <h3>🏆 MVP Abstimmungen</h3>
+                            <div id="dash-mvp-votes"></div>
+                        </div>
                     </div>
                 </section>
 
@@ -2866,19 +2869,28 @@ function updateUI() {
                         const match = t.description.match(/^(\d+)x/);
                         return s + (match ? parseInt(match[1]) : 1);
                     }, 0);
-                return { name: p.name, qty };
+                return { player: p, qty };
             })
             .filter(d => d.qty > 0)
-            .sort((a, b) => b.qty - a.qty);
+            .sort((a, b) => b.qty - a.qty)
+            .slice(0, 3);
 
-        topDrinksList.innerHTML = drinkRanking.length === 0
-            ? '<li class="list-item" style="color:var(--text-muted)">Noch keine Getränke verbucht.</li>'
-            : drinkRanking.slice(0, 5).map((d, i) => `
-                <li class="list-item">
-                    <span>${['🥇','🥈','🥉','4.','5.'][i]} ${d.name}</span>
-                    <strong style="color:var(--text-muted)">${d.qty}x 🍺</strong>
-                </li>
-            `).join('');
+        if (drinkRanking.length === 0) {
+            topDrinksList.innerHTML = '<li class="list-item" style="color:var(--text-muted)">Noch keine Getränke verbucht.</li>';
+        } else {
+            const medals = ['🥇','🥈','🥉'];
+            topDrinksList.style.cssText = 'display:flex; flex-direction:row; gap:12px; align-items:flex-end; justify-content:center; flex-wrap:wrap; padding:8px 0;';
+            topDrinksList.innerHTML = drinkRanking.map((d, i) => {
+                const card = utGetCardData(d.player.id);
+                const cardHTML = utBuildCardHTML(d.player, card, false, false);
+                const scale = i === 0 ? 0.72 : 0.62;
+                const mb = i === 0 ? 0 : -14;
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                    <div style="transform:scale(${scale});transform-origin:bottom center;margin-bottom:${(scale-1)*280}px;">${cardHTML}</div>
+                    <span style="font-size:0.95rem;font-weight:800;color:var(--text-main);">${medals[i]} ${d.qty}x 🍺</span>
+                </div>`;
+            }).join('');
+        }
     }
 
     // ── Top Drink Debtors ──
@@ -3582,6 +3594,20 @@ function renderGames() {
         const winnerPlayer = winner ? state.players.find(p => p.id === winner.playerId) : null;
 
         let mvpSection = '';
+        // Build leading player info for open votes
+        const leadingPlayer = totalVotes > 0 ? state.players.find(p => p.id === winner?.playerId) : null;
+        const leadingCard = leadingPlayer ? utGetCardData(leadingPlayer.id) : null;
+        const leadingHint = leadingPlayer && totalVotes > 0
+            ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 12px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:10px;">
+                <div style="transform:scale(0.45);transform-origin:left center;width:90px;height:${0.45*280}px;overflow:hidden;flex-shrink:0;">${utBuildCardHTML(leadingPlayer, leadingCard, false, false)}</div>
+                <div>
+                    <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:2px;">⚡ Aktuell führt</p>
+                    <p style="font-size:0.95rem;font-weight:800;color:#fbbf24;">${leadingPlayer.name.split(' ').pop()}</p>
+                    <p style="font-size:0.75rem;color:var(--text-muted);">${winner.count} von ${totalVotes} Stimme(n)</p>
+                </div>
+            </div>`
+            : `<p style="font-size:0.82rem;color:var(--text-muted);margin-top:8px;">Noch keine Stimmen.</p>`;
+
         if (isOpen && !hasVoted) {
             const playerBtns = [...state.players].sort((a,b) => a.name.localeCompare(b.name)).map(p => {
                 const v = votes[p.id] || 0;
@@ -3591,9 +3617,13 @@ function renderGames() {
             mvpSection = `<div style="margin-top:12px;">
                 <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">🗳️ MVP wählen – noch <strong style="color:#fbbf24;">${utMvpCountdown(deadline)}</strong></p>
                 <div style="display:flex; flex-wrap:wrap; gap:6px;">${playerBtns}</div>
+                ${leadingHint}
             </div>`;
         } else if (isOpen && hasVoted) {
-            mvpSection = `<div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);">✅ Du hast abgestimmt · ${totalVotes} Stimme(n) · noch <strong style="color:#fbbf24;">${utMvpCountdown(deadline)}</strong></div>`;
+            mvpSection = `<div style="margin-top:10px;">
+                <p style="font-size:0.85rem; color:var(--text-muted);">✅ Du hast abgestimmt · ${totalVotes} Stimme(n) · noch <strong style="color:#fbbf24;">${utMvpCountdown(deadline)}</strong></p>
+                ${leadingHint}
+            </div>`;
         } else if (winnerPlayer) {
             const card = utGetCardData(winnerPlayer.id);
             const miniCard = utBuildCardHTML(winnerPlayer, card, false, false);
