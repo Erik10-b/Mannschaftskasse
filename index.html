@@ -34,10 +34,11 @@
 body { font-family: var(--font-family); background: var(--bg-gradient); background-attachment: fixed; color: var(--text-main); min-height: 100vh; display: flex; color-scheme: dark; }
 .glass-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-radius: var(--radius-lg); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); }
 .app-container { display: flex; width: 100vw; height: 100vh; padding: 20px; gap: 20px; }
-.sidebar { width: 250px; display: flex; flex-direction: column; padding: 24px 16px; }
+.sidebar { width: 250px; display: flex; flex-direction: column; padding: 24px 16px; gap: 0; overflow-y: auto; scrollbar-width: none; }
+.sidebar::-webkit-scrollbar { display: none; }
 .sidebar-header h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 2rem; text-align: center; background: -webkit-linear-gradient(#60a5fa, #3b82f6); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .sidebar-logo { width: 100px; margin: 0 auto 15px auto; display: block; border-radius: 50%; filter: drop-shadow(0px 2px 8px rgba(0,0,0,0.4)); }
-.nav-links { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.nav-links { list-style: none; display: flex; flex-direction: column; gap: 12px; flex: 1; }
 .nav-links li { padding: 12px 16px; border-radius: var(--radius-md); cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 12px; font-weight: 500; }
 .nav-links li:hover { background: rgba(255,255,255,0.1); }
 .nav-links li.active { background: var(--primary); box-shadow: 0 4px 12px rgba(59,130,246,0.4); }
@@ -114,8 +115,7 @@ select option { background: var(--bg-color); color: var(--text-main); }
 .auth-sent-box { display: none; }
 .auth-sent-box.visible { display: block; }
 .auth-form-box.hidden-block { display: none; }
-#auth-logout-btn { position: fixed; bottom: 16px; left: 16px; z-index: 100; font-size: 0.75rem; opacity: 0.5; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: var(--text-muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; }
-#auth-logout-btn:hover { opacity: 1; }
+#auth-logout-btn { display: none !important; }
 #status-badge { padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
 #status-badge.readonly { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
 #status-badge.admin { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
@@ -844,6 +844,9 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                 <li data-target="meinkonto" id="nav-meinkonto" style="display:none;"><span class="icon">👤</span><span class="text">Mein Konto</span></li>
                 <li data-target="ranking"><span class="icon">🏅</span><span class="text">Ranking</span></li>
                 <li data-target="nutzer" id="nav-nutzer" style="display:none;"><span class="icon">⚙️</span><span class="text">Nutzer</span></li>
+                <li id="nav-logout" onclick="window.authLogout()" style="display:none; margin-top:auto; border-top:1px solid var(--glass-border); padding-top:12px; color:#fca5a5;">
+                    <span class="icon">🚪</span><span class="text">Abmelden</span>
+                </li>
             </ul>
             <!-- Mobile only: Kassenstand + Hamburger -->
             <div id="mobile-fund-badge" style="display:none;">
@@ -869,16 +872,16 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 
             <!-- Mobile Hamburger Overlay Nav -->
             <div id="mobile-nav-overlay" onclick="window.closeMobileNav()" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:150; backdrop-filter:blur(4px);"></div>
-            <div id="mobile-nav-drawer" style="display:none; position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:rgba(12,20,38,0.99); z-index:160; flex-direction:column; overflow-y:auto; backdrop-filter:blur(20px); border-right:1px solid var(--glass-border);">
-                <div style="display:flex; align-items:center; gap:10px; padding:20px 16px 16px; border-bottom:1px solid var(--glass-border);">
+            <div id="mobile-nav-drawer" style="display:none; position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:rgba(12,20,38,0.99); z-index:160; flex-direction:column; overflow:hidden; backdrop-filter:blur(20px); border-right:1px solid var(--glass-border);">
+                <div style="display:flex; align-items:center; gap:10px; padding:20px 16px 16px; border-bottom:1px solid var(--glass-border); flex-shrink:0;">
                     <div style="flex:1;">
-                        <div style="font-size:1.05rem; font-weight:700; color:#60a5fa;">FC Stern</div>
+                        <div style="font-size:1.05rem; font-weight:700; color:#60a5fa;">FC Stern Hub</div>
                         <div id="mobile-nav-status" style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Lädt...</div>
                     </div>
                     <button onclick="window.closeMobileNav()" style="background:rgba(255,255,255,0.08); border:1px solid var(--glass-border); border-radius:8px; color:var(--text-muted); font-size:1rem; cursor:pointer; padding:6px 10px; touch-action:manipulation;">✕</button>
                 </div>
-                <div id="mobile-nav-links" style="padding:8px; flex:1;"></div>
-                <div id="mobile-drawer-logout" style="padding:12px 16px 32px; border-top:1px solid var(--glass-border); display:none;">
+                <div id="mobile-nav-links" style="padding:8px; flex:1; overflow-y:auto;"></div>
+                <div id="mobile-drawer-logout" style="padding:12px 16px 32px; border-top:1px solid var(--glass-border); display:none; flex-shrink:0;">
                     <button onclick="window.authLogout(); window.closeMobileNav();" style="width:100%; padding:12px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:10px; color:#fca5a5; font-family:var(--font-family); font-size:0.9rem; font-weight:600; cursor:pointer; touch-action:manipulation;">🚪 Abmelden</button>
                 </div>
             </div>
@@ -944,8 +947,28 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                                     <input type="date" id="game-date">
                                 </div>
                                 <div class="form-group">
+                                    <label>Heim oder Auswärts?</label>
+                                    <div style="display:flex; gap:8px; margin-top:4px;">
+                                        <button type="button" id="btn-venue-home" onclick="window.setVenue('home')"
+                                            class="btn btn-outline" style="flex:1;">🏠 Heim</button>
+                                        <button type="button" id="btn-venue-away" onclick="window.setVenue('away')"
+                                            class="btn btn-outline" style="flex:1;">✈️ Auswärts</button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
                                     <label for="game-result">Ergebnis</label>
                                     <input type="text" id="game-result" placeholder="z.B. 3:1">
+                                </div>
+                                <div class="form-group">
+                                    <label>Ausgang</label>
+                                    <div style="display:flex; gap:8px; margin-top:4px;">
+                                        <button type="button" id="btn-outcome-win" onclick="window.setOutcome('win')"
+                                            class="btn btn-outline" style="flex:1; color:#10b981;">✅ Sieg</button>
+                                        <button type="button" id="btn-outcome-draw" onclick="window.setOutcome('draw')"
+                                            class="btn btn-outline" style="flex:1;">🤝 Unent.</button>
+                                        <button type="button" id="btn-outcome-loss" onclick="window.setOutcome('loss')"
+                                            class="btn btn-outline" style="flex:1; color:#ef4444;">❌ Nie.</button>
+                                    </div>
                                 </div>
                                 <button class="btn btn-primary" onclick="window.addGame()">🏟️ Spiel speichern</button>
                             </div>
@@ -1179,12 +1202,30 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                         <div id="meinkonto-content" style="text-align:center; padding:20px; color:var(--text-muted);">Lädt...</div>
                     </div>
                     <div id="meinkonto-details" style="display:none;">
-                        <!-- UT Card -->
+                        <!-- UT Card + Profil -->
                         <div class="card glass-panel" style="display:flex; align-items:center; gap:32px; flex-wrap:wrap;">
                             <div id="mk-ut-card-container"></div>
-                            <div style="flex:1; min-width:200px;">
-                                <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:12px;">Deine persönliche Spielerkarte. Klicke darauf um deine Attribute zu vergeben.</p>
+                            <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:12px;">
+                                <p style="color:var(--text-muted); font-size:0.9rem;">Deine persönliche Spielerkarte.</p>
                                 <button class="btn btn-outline btn-small" onclick="window.openUtCardModal(window.MY_PLAYER_ID)">✏️ Karte bearbeiten</button>
+                                <div style="border-top:1px solid var(--glass-border); padding-top:12px; display:flex; flex-direction:column; gap:10px;">
+                                    <div class="form-group" style="margin:0;">
+                                        <label style="font-size:0.8rem;">👕 Rückennummer</label>
+                                        <input type="number" id="mk-number" min="1" max="99" placeholder="z.B. 10" style="padding:8px 10px; font-size:0.95rem;" oninput="window.saveProfile()">
+                                    </div>
+                                    <div class="form-group" style="margin:0;">
+                                        <label style="font-size:0.8rem;">🌍 Nationalität</label>
+                                        <input type="text" id="mk-nationality" placeholder="z.B. Deutsch" style="padding:8px 10px; font-size:0.95rem;" oninput="window.saveProfile()">
+                                    </div>
+                                    <div class="form-group" style="margin:0;">
+                                        <label style="font-size:0.8rem;">🦶 Starker Fuß</label>
+                                        <div style="display:flex; gap:8px; margin-top:4px;">
+                                            <button type="button" id="mk-foot-left" onclick="window.setFoot('left')" class="btn btn-outline btn-small" style="flex:1;">Links</button>
+                                            <button type="button" id="mk-foot-right" onclick="window.setFoot('right')" class="btn btn-outline btn-small" style="flex:1;">Rechts</button>
+                                            <button type="button" id="mk-foot-both" onclick="window.setFoot('both')" class="btn btn-outline btn-small" style="flex:1;">Beide</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="dashboard-grid" style="margin-bottom:20px;">
@@ -1723,6 +1764,9 @@ function _applyRoleAndShow(role, playerId) {
     if (nutzerNav) nutzerNav.style.display = role === 'admin' ? '' : 'none';
     const mkNav = document.getElementById('nav-meinkonto');
     if (mkNav) mkNav.style.display = playerId ? '' : 'none';
+    const logoutNav = document.getElementById('nav-logout');
+    const session = JSON.parse(localStorage.getItem('mkasse_session') || '{}');
+    if (logoutNav) logoutNav.style.display = session.email ? '' : 'none';
 
     if (typeof loadState === 'function') loadState();
     else window.addEventListener('load', () => loadState());
@@ -1788,6 +1832,8 @@ window.authLogout    = function() {
     document.getElementById('auth-overlay').classList.remove('hidden');
     const logoutBtn = document.getElementById('auth-logout-btn');
     if (logoutBtn) logoutBtn.style.display = 'none';
+    const logoutNav = document.getElementById('nav-logout');
+    if (logoutNav) logoutNav.style.display = 'none';
     document.getElementById('auth-message').textContent = '';
     document.getElementById('auth-email').value = '';
     const c = document.getElementById('auth-code'); if (c) c.value = '';
@@ -1810,6 +1856,16 @@ window.loadMeinKonto = function() {
 
     // UT Card
     _renderMkUtCard();
+
+    // Profil laden
+    if (!state.playerProfiles) state.playerProfiles = {};
+    const profile = state.playerProfiles[playerId] || {};
+    const numEl = document.getElementById('mk-number');
+    const natEl = document.getElementById('mk-nationality');
+    if (numEl) numEl.value = profile.number || '';
+    if (natEl) natEl.value = profile.nationality || '';
+    window._currentFoot = profile.foot || null;
+    _updateFootButtons(profile.foot);
 
     // Balance
     const balance = getPlayerBalance(playerId);
@@ -2204,12 +2260,12 @@ function _buildMobileNav() {
     if (!container) return;
     container.innerHTML = NAV_ITEMS.map(item => `
         <div id="${item.id || ''}" data-mtarget="${item.target}"
-            style="display:flex; align-items:center; gap:14px; padding:13px 12px; border-radius:12px;
-                   cursor:pointer; font-weight:500; font-size:0.95rem; margin-bottom:2px;
-                   transition:background 0.15s; touch-action:manipulation;"
+            style="display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:10px;
+                   cursor:pointer; font-size:0.95rem; font-weight:500;
+                   margin-bottom:2px; touch-action:manipulation;"
             onclick="window._mobileNavTo('${item.target}')">
-            <span style="font-size:1.3rem; width:26px; text-align:center;">${item.icon}</span>
-            <span>${item.text}</span>
+            <span style="font-size:1.2rem; width:24px; text-align:center; flex-shrink:0;">${item.icon}</span>
+            <span style="color:var(--text-main);">${item.text}</span>
         </div>
     `).join('');
     // Hide admin-only items
@@ -3773,6 +3829,26 @@ function gamesInit() {
     if (!state.mvpVotes) state.mvpVotes = {}; // gameId -> { playerId: count, voters: [email] }
 }
 
+let _gameVenue = null;   // 'home' | 'away'
+let _gameOutcome = null; // 'win' | 'draw' | 'loss'
+
+window.setVenue = function(v) {
+    _gameVenue = v;
+    const h = document.getElementById('btn-venue-home');
+    const a = document.getElementById('btn-venue-away');
+    if (h) h.classList.toggle('btn-selected', v === 'home');
+    if (a) a.classList.toggle('btn-selected', v === 'away');
+};
+window.setOutcome = function(o) {
+    _gameOutcome = o;
+    const w = document.getElementById('btn-outcome-win');
+    const d = document.getElementById('btn-outcome-draw');
+    const l = document.getElementById('btn-outcome-loss');
+    if (w) w.classList.toggle('btn-selected', o === 'win');
+    if (d) d.classList.toggle('btn-selected', o === 'draw');
+    if (l) l.classList.toggle('btn-selected', o === 'loss');
+};
+
 window.addGame = function() {
     gamesInit();
     const opponent = document.getElementById('game-opponent').value.trim();
@@ -3782,10 +3858,14 @@ window.addGame = function() {
     state.games.push({
         id: generateId(),
         opponent, date, result: result || '',
+        venue: _gameVenue || null,
+        outcome: _gameOutcome || null,
         mvpDeadline: new Date(new Date(date).getTime() + 3 * 86400000).toISOString()
     });
     document.getElementById('game-opponent').value = '';
     document.getElementById('game-result').value = '';
+    _gameVenue = null; _gameOutcome = null;
+    window.setVenue(null); window.setOutcome(null);
     saveState();
     renderGames();
 };
@@ -3912,12 +3992,20 @@ function renderGames() {
             mvpSection = `<div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);">Keine Stimmen abgegeben.</div>`;
         }
 
+        const venueIcon = game.venue === 'home' ? '🏠' : game.venue === 'away' ? '✈️' : '';
+        const outcomeLabel = { win: '✅ Sieg', draw: '🤝 Unentschieden', loss: '❌ Niederlage' };
+        const outcomeColor = { win: '#10b981', draw: '#94a3b8', loss: '#ef4444' };
+
         return `<div class="glass-panel" style="padding:16px 20px; border-radius:12px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
                 <div>
-                    <strong style="font-size:1.05rem;">⚽ vs. ${game.opponent}</strong>
-                    ${game.result ? `<span style="margin-left:10px; font-size:0.9rem; color:var(--success); font-weight:700;">${game.result}</span>` : ''}
-                    <br><span style="font-size:0.82rem; color:var(--text-muted);">${new Date(game.date).toLocaleDateString('de-DE')}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <strong style="font-size:1.05rem;">⚽ vs. ${game.opponent}</strong>
+                        ${venueIcon ? `<span style="font-size:0.8rem;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.08);">${venueIcon} ${game.venue === 'home' ? 'Heim' : 'Auswärts'}</span>` : ''}
+                        ${game.result ? `<span style="font-size:0.9rem;font-weight:700;color:#60a5fa;">${game.result}</span>` : ''}
+                        ${game.outcome ? `<span style="font-size:0.82rem;font-weight:700;color:${outcomeColor[game.outcome]};">${outcomeLabel[game.outcome]}</span>` : ''}
+                    </div>
+                    <span style="font-size:0.82rem; color:var(--text-muted);">${new Date(game.date).toLocaleDateString('de-DE')}</span>
                 </div>
                 <div style="display:flex;gap:6px;" class="edit-only">
                     <button class="btn btn-outline btn-small" onclick="window.openGameStats('${game.id}')">📊 Details</button>
@@ -4038,6 +4126,7 @@ const DUEL_ATTRS = [
 let _duel = null; // { playerA, playerB, attr, votes: {a, b}, voted: bool }
 
 window.newDuel = function() {
+    if (window._duelUndoTimer) { clearInterval(window._duelUndoTimer); window._duelUndoTimer = null; }
     if (state.players.length < 2) return;
     const shuffled = [...state.players].sort(() => Math.random() - 0.5);
     const playerA = shuffled[0];
@@ -4057,12 +4146,30 @@ window.voteDuel = async function(side) {
     if (!_duel || _duel.voted) return;
     _duel.votes[side]++;
     _duel.voted = true;
+    _duel.votedSide = side;
+    _duel.votedAt = Date.now();
 
-    // Persist
     if (!state.duels) state.duels = {};
     state.duels[_duel.key] = { ..._duel.votes };
     renderDuel();
-    await _utMergeCardIntoMainState(null, null); // reuse state merger — but we need a full merge
+    _saveDuelToState();
+};
+
+window.undoDuel = async function() {
+    if (!_duel || !_duel.voted) return;
+    // Only allow within 5 minutes
+    if (Date.now() - _duel.votedAt > 5 * 60 * 1000) {
+        alert('Die Stimme kann nur innerhalb von 5 Minuten zurückgenommen werden.');
+        return;
+    }
+    _duel.votes[_duel.votedSide]--;
+    _duel.voted = false;
+    _duel.votedSide = null;
+    _duel.votedAt = null;
+
+    if (!state.duels) state.duels = {};
+    state.duels[_duel.key] = { ..._duel.votes };
+    renderDuel();
     _saveDuelToState();
 };
 
@@ -4135,12 +4242,32 @@ function renderDuel() {
         </div>
     `;
 
-    // Auto-show next duel button after voting
+    // Buttons after voting
     if (voted) {
+        const canUndo = _duel.votedAt && (Date.now() - _duel.votedAt < 5 * 60 * 1000);
         const next = document.createElement('div');
-        next.style.cssText = 'width:100%; text-align:center; margin-top:16px;';
-        next.innerHTML = `<button class="btn btn-outline" onclick="window.newDuel()">🎲 Nächstes Duell</button>`;
+        next.style.cssText = 'width:100%; text-align:center; margin-top:16px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;';
+        next.innerHTML = `
+            ${canUndo ? `<button class="btn btn-secondary btn-small" onclick="window.undoDuel()" style="font-size:0.8rem;">↩️ Zurücknehmen</button>` : ''}
+            <button class="btn btn-outline" onclick="window.newDuel()">🎲 Nächstes Duell</button>
+        `;
         container.appendChild(next);
+
+        // Start countdown timer for undo button
+        if (canUndo) {
+            window._duelUndoTimer = setInterval(() => {
+                const remaining = Math.max(0, 5 * 60 * 1000 - (Date.now() - _duel.votedAt));
+                const undoBtn = container.querySelector('[onclick="window.undoDuel()"]');
+                if (!undoBtn) { clearInterval(window._duelUndoTimer); return; }
+                if (remaining <= 0) {
+                    undoBtn.remove();
+                    clearInterval(window._duelUndoTimer);
+                } else {
+                    const secs = Math.ceil(remaining / 1000);
+                    undoBtn.textContent = `↩️ Zurücknehmen (${secs}s)`;
+                }
+            }, 1000);
+        }
     }
 }
 
@@ -4435,7 +4562,43 @@ function renderRanking() {
         duelHTML;
 }
 
-    </script>
-</body>
+function _updateFootButtons(foot) {
+    ['left','right','both'].forEach(f => {
+        const btn = document.getElementById(`mk-foot-${f}`);
+        if (btn) btn.classList.toggle('btn-selected', foot === f);
+    });
+}
 
-</html>
+window.setFoot = function(foot) {
+    window._currentFoot = foot;
+    _updateFootButtons(foot);
+    window.saveProfile();
+};
+
+window.saveProfile = async function() {
+    const playerId = window.MY_PLAYER_ID;
+    if (!playerId) return;
+    if (!state.playerProfiles) state.playerProfiles = {};
+    state.playerProfiles[playerId] = {
+        number: document.getElementById('mk-number')?.value || '',
+        nationality: document.getElementById('mk-nationality')?.value || '',
+        foot: window._currentFoot || null,
+    };
+    // Save directly to Supabase state (works for all roles)
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+        });
+        const rows = await res.json();
+        if (!rows || !rows[0]) return;
+        const data = rows[0].data;
+        if (!data.playerProfiles) data.playerProfiles = {};
+        data.playerProfiles[playerId] = state.playerProfiles[playerId];
+        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
+            method: 'PATCH',
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+                'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
+        });
+        setSyncStatus('saved', '✓ Gespeichert');
+    } catch(e) { console.error('Profile save error:', e); }
