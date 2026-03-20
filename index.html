@@ -842,6 +842,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                 <li data-target="getraenke"><span class="icon">🍺</span><span class="text">Getränke</span></li>
                 <li data-target="ausgaben"><span class="icon">📉</span><span class="text">Ausgaben</span></li>
                 <li data-target="meinkonto" id="nav-meinkonto" style="display:none;"><span class="icon">👤</span><span class="text">Mein Konto</span></li>
+                <li data-target="ranking"><span class="icon">🏅</span><span class="text">Ranking</span></li>
                 <li data-target="nutzer" id="nav-nutzer" style="display:none;"><span class="icon">⚙️</span><span class="text">Nutzer</span></li>
             </ul>
             <!-- Mobile only: Kassenstand + Hamburger -->
@@ -1236,6 +1237,17 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Ranking -->
+                <section id="ranking" class="section hidden">
+                    <div class="card glass-panel">
+                        <div class="section-header">
+                            <h2>🏅 Community Ranking</h2>
+                            <span style="font-size:0.82rem; color:var(--text-muted);">Basierend auf Duell-Abstimmungen</span>
+                        </div>
+                        <div id="ranking-content"></div>
                     </div>
                 </section>
 
@@ -2183,6 +2195,7 @@ const NAV_ITEMS = [
     { target: 'getraenke', icon: '🍺', text: 'Getränke' },
     { target: 'ausgaben',  icon: '📉', text: 'Ausgaben' },
     { target: 'meinkonto', icon: '👤', text: 'Mein Konto', id: 'mnav-meinkonto' },
+    { target: 'ranking',   icon: '🏅', text: 'Ranking' },
     { target: 'nutzer',    icon: '⚙️', text: 'Nutzer',    id: 'mnav-nutzer' },
 ];
 
@@ -2238,6 +2251,7 @@ window._mobileNavTo = function(target) {
     if (target === 'meinkonto') window.loadMeinKonto();
     if (target === 'spiele') renderGames();
     if (target === 'spieler') { if (!_duel) window.newDuel(); }
+    if (target === 'ranking') renderRanking();
     _updateMobileNavActive();
     window.closeMobileNav();
 };
@@ -2281,6 +2295,7 @@ document.querySelectorAll('.nav-links li').forEach(link => {
         if (targetId === 'meinkonto') window.loadMeinKonto();
         if (targetId === 'spiele') renderGames();
         if (targetId === 'spieler') { if (!_duel) window.newDuel(); }
+        if (targetId === 'ranking') renderRanking();
     });
 });
 
@@ -4280,6 +4295,145 @@ window.saveGameStats = function() {
     saveState();
     renderGames();
 };
+
+// ══════════════════════════════════════════════════════════════
+// RANKING — Top 3 pro Attribut aus Duell-Votes
+// ══════════════════════════════════════════════════════════════
+
+function renderRanking() {
+    const container = document.getElementById('ranking-content');
+    if (!container) return;
+
+    // ── Tore & Assists aus Spieldetails ──────────────────────────
+    const goalStats = {}; // { playerId: { goals, assists } }
+    state.players.forEach(p => { goalStats[p.id] = { goals: 0, assists: 0 }; });
+    (state.games || []).forEach(game => {
+        (game.goals || []).forEach(g => {
+            if (g.scorerId && goalStats[g.scorerId]) goalStats[g.scorerId].goals++;
+            if (g.assistId && goalStats[g.assistId]) goalStats[g.assistId].assists++;
+        });
+    });
+
+    const topScorers = state.players
+        .map(p => ({ player: p, ...goalStats[p.id] }))
+        .filter(x => x.goals > 0 || x.assists > 0)
+        .sort((a, b) => (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists));
+
+    const topAssists = [...state.players]
+        .map(p => ({ player: p, ...goalStats[p.id] }))
+        .filter(x => x.assists > 0)
+        .sort((a, b) => b.assists - a.assists);
+
+    const medals = ['🥇','🥈','🥉'];
+    const medalColors = ['#fbbf24','#94a3b8','#cd7c3a'];
+
+    function statPodium(players) {
+        const podiumOrder = players.length === 1 ? [0]
+            : players.length === 2 ? [1, 0]
+            : [1, 0, 2];
+        return podiumOrder.map(i => {
+            const { player, goals, assists } = players[i];
+            const card = utGetCardData(player.id);
+            const cardHTML = utBuildCardHTML(player, card, false, false);
+            const s = i === 0 ? 0.72 : 0.58;
+            return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                <span style="font-size:0.75rem;font-weight:800;color:${medalColors[i]};">${medals[i]}</span>
+                <div style="transform:scale(${s});transform-origin:bottom center;margin-top:${(s-1)*310}px;">${cardHTML}</div>
+                <div style="text-align:center;font-size:0.8rem;font-weight:700;color:var(--text-main);">
+                    ${goals !== undefined ? `⚽ ${goals}` : ''} ${assists !== undefined ? `🎯 ${assists}` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    let statsHTML = '';
+
+    if (topScorers.length > 0) {
+        statsHTML += `<div style="margin-bottom:32px;">
+            <h3 style="margin-bottom:16px;font-size:1rem;">⚽ Torschützen</h3>
+            <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">
+                ${statPodium(topScorers.slice(0,3))}
+            </div>
+        </div>
+        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
+    }
+
+    if (topAssists.length > 0) {
+        statsHTML += `<div style="margin-bottom:32px;">
+            <h3 style="margin-bottom:16px;font-size:1rem;">🎯 Vorlagen</h3>
+            <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">
+                ${statPodium(topAssists.slice(0,3).map(x => ({ ...x, goals: undefined })))}
+            </div>
+        </div>
+        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
+    }
+
+    if (topScorers.length === 0 && topAssists.length === 0) {
+        statsHTML = `<p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:24px;">Noch keine Tore oder Assists eingetragen. Füge Spieldetails über den 📊 Details-Button im Spiele-Tab hinzu.</p>
+        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
+    }
+    // ── Duell Rankings ──────────────────────────────────────────
+    let duelHTML = '';
+    if (!state.duels || Object.keys(state.duels).length === 0) {
+        duelHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Duell-Abstimmungen vorhanden.</p>';
+    } else {
+        const wins = {};
+        state.players.forEach(p => { wins[p.id] = {}; DUEL_ATTRS.forEach(a => { wins[p.id][a.key] = 0; }); });
+        Object.entries(state.duels).forEach(([key, votes]) => {
+            const parts = key.split('__');
+            if (parts.length !== 2) return;
+            const [playerPair, attrKey] = parts;
+            const [idA, idB] = playerPair.split('_');
+            if (!votes || typeof votes.a !== 'number') return;
+            const totalA = votes.a, totalB = votes.b;
+            const total = totalA + totalB;
+            if (total === 0) return;
+            if (wins[idA]) wins[idA][attrKey] = (wins[idA][attrKey] || 0) + totalA / total;
+            if (wins[idB]) wins[idB][attrKey] = (wins[idB][attrKey] || 0) + totalB / total;
+        });
+
+        duelHTML = DUEL_ATTRS.map((attr, attrIdx) => {
+            const ranked = state.players
+                .map(p => ({ player: p, score: wins[p.id]?.[attr.key] || 0 }))
+                .filter(x => x.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 3);
+
+            if (ranked.length === 0) {
+                return `<div style="margin-bottom:28px;">
+                    <h3 style="margin-bottom:12px;font-size:1rem;">${attr.icon} ${attr.label}</h3>
+                    <p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Votes.</p>
+                </div>`;
+            }
+
+            const podiumOrder = ranked.length === 1 ? [0]
+                : ranked.length === 2 ? [1, 0]
+                : [1, 0, 2];
+
+            const podium = podiumOrder.map(i => {
+                const { player, score } = ranked[i];
+                const card = utGetCardData(player.id);
+                const cardHTML = utBuildCardHTML(player, card, false, false);
+                const s = i === 0 ? 0.72 : 0.58;
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                    <span style="font-size:0.75rem;font-weight:800;color:${medalColors[i]};">${medals[i]}</span>
+                    <div style="transform:scale(${s});transform-origin:bottom center;margin-top:${(s-1)*310}px;">${cardHTML}</div>
+                    <span style="font-size:0.8rem;font-weight:700;color:var(--text-main);">${score.toFixed(1)} Pkt</span>
+                </div>`;
+            }).join('');
+
+            return `${attrIdx > 0 ? '<div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>' : ''}
+                <div style="margin-bottom:32px;">
+                    <h3 style="margin-bottom:16px;font-size:1rem;">${attr.icon} ${attr.label}</h3>
+                    <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">${podium}</div>
+                </div>`;
+        }).join('');
+    }
+
+    container.innerHTML = statsHTML +
+        `<h3 style="margin-bottom:20px;font-size:1rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:0.8rem;">⚔️ Community-Duell Ranking</h3>` +
+        duelHTML;
+}
 
     </script>
 </body>
