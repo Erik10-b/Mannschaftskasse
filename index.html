@@ -285,18 +285,40 @@ body.role-getraenke .ausgaben-only { display: none !important; }
     .ut-card { width: 100%; max-width: 200px; }
 
     /* ── Duell ── */
+    /* ── Duell Mobile ── */
     #duel-container {
-        gap: 4px;
+        gap: 8px;
         padding: 4px 0;
         flex-wrap: nowrap;
-        align-items: flex-start;
+        align-items: stretch;
     }
-    .duel-card-wrap { gap: 6px; flex: 1; min-width: 0; align-items: center; }
-    .duel-card-scaled { transform: scale(0.28); transform-origin: top center; margin-bottom: -223px; }
+    .duel-card-wrap { gap: 8px; flex: 1; min-width: 0; align-items: center; }
+    .duel-card-scaled {
+        width: 120px !important;
+        height: 168px !important;
+        transform: none !important;
+        margin-bottom: 0 !important;
+        flex-shrink: 0;
+    }
+    .duel-card-scaled .ut-card {
+        width: 120px !important;
+        height: 168px !important;
+    }
+    .duel-card-scaled .ut-card-rating { font-size: 1.3rem !important; }
+    .duel-card-scaled .ut-card-pos { font-size: 0.55rem !important; }
+    .duel-card-scaled .ut-card-avatar { height: 72px !important; font-size: 2.2rem !important; }
+    .duel-card-scaled .ut-card-avatar img { height: 72px !important; }
+    .duel-card-scaled .ut-card-name { font-size: 0.58rem !important; letter-spacing: 0.8px !important; }
+    .duel-card-scaled .ut-card-divider { margin: 2px 6px !important; }
+    .duel-card-scaled .ut-card-stats { padding: 1px 6px 4px !important; gap: 0 !important; }
+    .duel-card-scaled .ut-card-stat-val { font-size: 0.6rem !important; min-width: 14px !important; }
+    .duel-card-scaled .ut-card-stat-label { font-size: 0.5rem !important; }
+    .duel-card-scaled .ut-card-edit-hint { display: none !important; }
     .duel-vote-btn { width: 100%; font-size: 0.72rem; padding: 7px 4px; }
     .duel-result-bar { width: 100%; }
     .duel-result-pct { font-size: 0.68rem; }
-    .duel-attr { font-size: 0.75rem; }
+    .duel-attr { font-size: 0.72rem; }
+    .duel-vs { font-size: 1rem; padding-top: 50px; flex-shrink: 0; }
 
     /* ── Modals → Sheet von unten ── */
     .modal { align-items: flex-end; padding: 0; }
