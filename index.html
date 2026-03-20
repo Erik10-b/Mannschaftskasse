@@ -194,14 +194,21 @@ body.role-getraenke .ausgaben-only { display: none !important; }
     opacity: 0.8;
 }
 .ut-card-avatar {
-    width: 120px;
-    height: 90px;
+    width: 100%;
+    height: 130px;
     margin: 0 auto;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: center;
     font-size: 3.5rem;
     filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+}
+.ut-card-avatar img {
+    width: 100%;
+    height: 130px;
+    object-fit: contain;
+    object-position: bottom center;
+    display: block;
 }
 .ut-card-name {
     text-align: center;
@@ -305,6 +312,17 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 .ut-attr-row input[type=range] { flex: 1; accent-color: #d4a843; height: 6px; min-height: 6px; cursor: pointer; touch-action: manipulation; }
 .ut-attr-val { font-size: 1rem; font-weight: 800; color: #d4a843; min-width: 28px; text-align: right; }
 .ut-pos-select { width: 100%; margin-bottom: 16px; }
+/* ═══ DUELL ═══ */
+.duel-vs { font-size: 2rem; font-weight: 900; color: var(--text-muted); text-align: center; flex-shrink: 0; }
+.duel-card-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.duel-attr { font-size: 0.82rem; color: #fbbf24; text-align: center; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+.duel-vote-btn { width: 200px; padding: 10px; font-size: 0.9rem; font-weight: 700; border-radius: 10px; border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease; background: rgba(255,255,255,0.08); color: var(--text-main); font-family: var(--font-family); }
+.duel-vote-btn:hover { background: rgba(255,255,255,0.18); transform: translateY(-2px); }
+.duel-vote-btn.winner { background: rgba(251,191,36,0.2); border-color: #fbbf24; color: #fbbf24; }
+.duel-vote-btn.loser  { opacity: 0.45; }
+.duel-result-bar { width: 200px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.duel-result-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; background: #fbbf24; }
+.duel-result-pct { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
     </style>
     <style media="print">
 /* ═══════════════════════════════════════════════════════════════
@@ -685,23 +703,15 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 
                 <!-- Spieler -->
                 <section id="spieler" class="section hidden">
-                    <div class="card glass-panel">
+
+                    <!-- Duell -->
+                    <div class="card glass-panel" style="margin-bottom:0;">
                         <div class="section-header">
-                            <h2>Spieler Verwaltung</h2>
-                            <button class="btn btn-primary edit-only" id="btn-add-player">+ Neuer Spieler</button>
+                            <h2>⚔️ Wer ist besser?</h2>
+                            <button class="btn btn-outline btn-small" onclick="window.newDuel()">🎲 Neues Duell</button>
                         </div>
-                        <div class="table-container">
-                            <table class="modern-table">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Kontostand</th>
-                                        <th>Offene Strafen</th>
-                                        <th>Offene Beiträge</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="player-table-body"></tbody>
-                            </table>
+                        <div id="duel-container" style="display:flex; align-items:center; justify-content:center; gap:24px; flex-wrap:wrap; padding:8px 0;">
+                            <p style="color:var(--text-muted);">Klicke auf "Neues Duell" um zwei Spieler zu vergleichen.</p>
                         </div>
                     </div>
 
@@ -709,7 +719,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                     <div class="card glass-panel" style="margin-top:0;">
                         <div class="section-header">
                             <h2>⚽ Spieler-Karten</h2>
-                            <span style="font-size:0.85rem; color:var(--text-muted);">Klicke auf deine Karte um Attribute zu vergeben</span>
+                            <button class="btn btn-primary edit-only" id="btn-add-player">+ Neuer Spieler</button>
                         </div>
                         <div id="ut-cards-grid" class="ut-cards-grid"></div>
                     </div>
@@ -1873,6 +1883,7 @@ document.querySelectorAll('.nav-links li').forEach(link => {
         if (targetId === 'nutzer') window.loadNutzer();
         if (targetId === 'meinkonto') window.loadMeinKonto();
         if (targetId === 'spiele') renderGames();
+        if (targetId === 'spieler') { if (!_duel) window.newDuel(); }
     });
 });
 
@@ -3092,7 +3103,7 @@ function utBuildCardHTML(player, card, showHint, clickable) {
     const onclick = clickable ? `onclick="window.openUtCardModal('${player.id}')"` : '';
 
     const avatarContent = card.image
-        ? `<img src="${card.image}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" alt="${player.name}">`
+        ? `<img src="${card.image}" alt="${player.name}">`
         : `<span style="font-size:3.5rem;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.4))">${emoji}</span>`;
 
     return `<div class="ut-card ${rClass}" ${onclick} style="${clickable?'':'cursor:default;'}">
@@ -3197,7 +3208,7 @@ window.utUpdatePreview = function() {
     const emoji = utGetPlayerEmoji(playerId);
     const shortName = player.name.split(' ').pop().toUpperCase();
     const avatarContent = card.image
-        ? `<img src="${card.image}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" alt="${player.name}">`
+        ? `<img src="${card.image}" alt="${player.name}">`
         : `<span style="font-size:3.5rem;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.4))">${emoji}</span>`;
 
     preview.innerHTML = `
@@ -3381,7 +3392,15 @@ window.voteForMvp = function(gameId, playerId) {
     renderDashboardMvp();
 };
 
-function getMvpWinner(gameId) {
+function utMvpCountdown(deadline) {
+    const diff = deadline - new Date();
+    if (diff <= 0) return null;
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    if (h >= 48) return `${Math.ceil(h/24)} Tage`;
+    if (h >= 1)  return `${h}h ${m}m`;
+    return `${m} Minute${m !== 1 ? 'n' : ''}`;
+}
     if (!state.mvpVotes || !state.mvpVotes[gameId]) return null;
     const votes = state.mvpVotes[gameId].votes || {};
     if (Object.keys(votes).length === 0) return null;
@@ -3422,11 +3441,11 @@ function renderGames() {
                     style="font-size:0.8rem; padding:6px 10px;">⭐ ${p.name}${v > 0 ? ` (${v})` : ''}</button>`;
             }).join('');
             mvpSection = `<div style="margin-top:12px;">
-                <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">🗳️ MVP wählen – noch ${Math.ceil((deadline - now) / 86400000)} Tag(e)</p>
+                <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">🗳️ MVP wählen – noch <strong style="color:#fbbf24;">${utMvpCountdown(deadline)}</strong></p>
                 <div style="display:flex; flex-wrap:wrap; gap:6px;">${playerBtns}</div>
             </div>`;
         } else if (isOpen && hasVoted) {
-            mvpSection = `<div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);">✅ Du hast abgestimmt. ${totalVotes} Stimme(n) bisher.</div>`;
+            mvpSection = `<div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);">✅ Du hast abgestimmt · ${totalVotes} Stimme(n) · noch <strong style="color:#fbbf24;">${utMvpCountdown(deadline)}</strong></div>`;
         } else if (winnerPlayer) {
             const card = utGetCardData(winnerPlayer.id);
             const miniCard = utBuildCardHTML(winnerPlayer, card, false, false);
@@ -3466,6 +3485,7 @@ function renderActiveVotes() {
         return;
     }
     container.innerHTML = open.map(g => {
+        const deadline = new Date(g.mvpDeadline);
         const votes = (state.mvpVotes[g.id] || {}).votes || {};
         const total = Object.values(votes).reduce((s,n) => s+n, 0);
         return `<div class="list-item">
@@ -3473,7 +3493,7 @@ function renderActiveVotes() {
                 <strong>vs. ${g.opponent}</strong>
                 <span style="font-size:0.82rem; color:var(--text-muted);">${new Date(g.date).toLocaleDateString('de-DE')} · ${total} Stimme(n)</span>
             </div>
-            <span style="font-size:0.8rem; color:#fbbf24; font-weight:600;">🗳️ offen</span>
+            <span style="font-size:0.8rem; color:#fbbf24; font-weight:600;">⏳ ${utMvpCountdown(deadline)}</span>
         </div>`;
     }).join('');
 }
@@ -3493,7 +3513,8 @@ function renderDashboardMvp() {
     }
 
     container.innerHTML = recentGames.map(game => {
-        const isOpen = new Date(game.mvpDeadline) > now;
+        const deadline = new Date(game.mvpDeadline);
+        const isOpen = deadline > now;
         const winner = getMvpWinner(game.id);
         const winnerPlayer = winner ? state.players.find(p => p.id === winner.playerId) : null;
         const totalVotes = Object.values((state.mvpVotes[game.id] || {}).votes || {}).reduce((s,n) => s+n, 0);
@@ -3505,7 +3526,7 @@ function renderDashboardMvp() {
             </div>
             <div style="text-align:right;">
                 ${isOpen
-                    ? `<span style="color:#fbbf24; font-size:0.82rem; font-weight:600;">🗳️ Offen (${totalVotes})</span>`
+                    ? `<span style="color:#fbbf24; font-size:0.82rem; font-weight:600;">⏳ ${utMvpCountdown(deadline)} (${totalVotes})</span>`
                     : winnerPlayer
                         ? `<span style="color:#fbbf24; font-weight:700;">🏆 ${winnerPlayer.name.split(' ').pop()}</span>`
                         : `<span style="color:var(--text-muted); font-size:0.82rem;">Keine Stimmen</span>`
@@ -3513,6 +3534,128 @@ function renderDashboardMvp() {
             </div>
         </div>`;
     }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// DUELL — Wer ist besser?
+// ══════════════════════════════════════════════════════════════
+
+const DUEL_ATTRS = [
+    { key: 'tempo',    label: 'Tempo',    icon: '⚡' },
+    { key: 'schuss',   label: 'Schuss',   icon: '🎯' },
+    { key: 'pass',     label: 'Passspiel',icon: '🎪' },
+    { key: 'dribbling',label: 'Dribbling',icon: '🕹️' },
+    { key: 'abwehr',   label: 'Abwehr',   icon: '🛡️' },
+    { key: 'physisch', label: 'Physis',   icon: '💪' },
+];
+
+let _duel = null; // { playerA, playerB, attr, votes: {a, b}, voted: bool }
+
+window.newDuel = function() {
+    if (state.players.length < 2) return;
+    const shuffled = [...state.players].sort(() => Math.random() - 0.5);
+    const playerA = shuffled[0];
+    const playerB = shuffled[1];
+    const attr = DUEL_ATTRS[Math.floor(Math.random() * DUEL_ATTRS.length)];
+
+    // Load existing votes from state
+    if (!state.duels) state.duels = {};
+    const key = `${[playerA.id, playerB.id].sort().join('_')}__${attr.key}`;
+    const existing = state.duels[key] || { a: 0, b: 0 };
+
+    _duel = { playerA, playerB, attr, key, votes: { ...existing }, voted: false };
+    renderDuel();
+};
+
+window.voteDuel = async function(side) {
+    if (!_duel || _duel.voted) return;
+    _duel.votes[side]++;
+    _duel.voted = true;
+
+    // Persist
+    if (!state.duels) state.duels = {};
+    state.duels[_duel.key] = { ..._duel.votes };
+    renderDuel();
+    await _utMergeCardIntoMainState(null, null); // reuse state merger — but we need a full merge
+    _saveDuelToState();
+};
+
+async function _saveDuelToState() {
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+        });
+        const rows = await res.json();
+        if (!rows || !rows[0]) return;
+        const data = rows[0].data;
+        if (!data.duels) data.duels = {};
+        data.duels[_duel.key] = { ..._duel.votes };
+        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+                'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
+        });
+        setSyncStatus('saved', '✓ Gespeichert');
+    } catch(e) { console.error('Duel save error:', e); }
+}
+
+function renderDuel() {
+    const container = document.getElementById('duel-container');
+    if (!container || !_duel) return;
+    const { playerA, playerB, attr, votes, voted } = _duel;
+    const cardA = utGetCardData(playerA.id);
+    const cardB = utGetCardData(playerB.id);
+    const valA = cardA[attr.key] || 70;
+    const valB = cardB[attr.key] || 70;
+    const total = votes.a + votes.b;
+    const pctA = total > 0 ? Math.round(votes.a / total * 100) : 50;
+    const pctB = total > 0 ? Math.round(votes.b / total * 100) : 50;
+
+    const winnerSide = voted && total > 0 ? (votes.a >= votes.b ? 'a' : 'b') : null;
+
+    const cardHtmlA = utBuildCardHTML(playerA, cardA, false, false);
+    const cardHtmlB = utBuildCardHTML(playerB, cardB, false, false);
+
+    container.innerHTML = `
+        <div class="duel-card-wrap">
+            <div style="transform:scale(0.85); transform-origin:bottom center; margin-bottom:-24px;">${cardHtmlA}</div>
+            <div class="duel-attr">${attr.icon} ${attr.label}: ${valA}</div>
+            ${voted ? `
+                <div class="duel-result-bar"><div class="duel-result-fill" style="width:${pctA}%"></div></div>
+                <div class="duel-result-pct">${votes.a} Stimme${votes.a !== 1 ? 'n' : ''} (${pctA}%)</div>
+            ` : ''}
+            <button class="duel-vote-btn ${winnerSide === 'a' ? 'winner' : winnerSide === 'b' ? 'loser' : ''}"
+                onclick="window.voteDuel('a')" ${voted ? 'disabled' : ''}>
+                👑 ${playerA.name.split(' ').pop()}
+            </button>
+        </div>
+
+        <div class="duel-vs">VS</div>
+
+        <div class="duel-card-wrap">
+            <div style="transform:scale(0.85); transform-origin:bottom center; margin-bottom:-24px;">${cardHtmlB}</div>
+            <div class="duel-attr">${attr.icon} ${attr.label}: ${valB}</div>
+            ${voted ? `
+                <div class="duel-result-bar"><div class="duel-result-fill" style="width:${pctB}%"></div></div>
+                <div class="duel-result-pct">${votes.b} Stimme${votes.b !== 1 ? 'n' : ''} (${pctB}%)</div>
+            ` : ''}
+            <button class="duel-vote-btn ${winnerSide === 'b' ? 'winner' : winnerSide === 'a' ? 'loser' : ''}"
+                onclick="window.voteDuel('b')" ${voted ? 'disabled' : ''}>
+                👑 ${playerB.name.split(' ').pop()}
+            </button>
+        </div>
+    `;
+
+    // Auto-show next duel button after voting
+    if (voted) {
+        const next = document.createElement('div');
+        next.style.cssText = 'width:100%; text-align:center; margin-top:16px;';
+        next.innerHTML = `<button class="btn btn-outline" onclick="window.newDuel()">🎲 Nächstes Duell</button>`;
+        container.appendChild(next);
+    }
 }
 
     </script>
