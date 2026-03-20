@@ -332,7 +332,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 
     /* ── Diverses ── */
     #sync-indicator { display: none; }
-    #auth-logout-btn { bottom: 16px; left: 12px; font-size: 0.7rem; }
+    #auth-logout-btn { display: none !important; } /* Abmelden ist im Drawer */
 }
 
 /* ── Extra kleine Phones (< 390px) ── */
@@ -822,6 +822,12 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                 <li data-target="meinkonto" id="nav-meinkonto" style="display:none;"><span class="icon">👤</span><span class="text">Mein Konto</span></li>
                 <li data-target="nutzer" id="nav-nutzer" style="display:none;"><span class="icon">⚙️</span><span class="text">Nutzer</span></li>
             </ul>
+            <!-- Mobile only: Kassenstand + Hamburger -->
+            <div id="mobile-fund-badge" style="display:none;">
+                <span>Kasse</span>
+                <strong id="mobile-fund-amount">—</strong>
+            </div>
+            <button id="mobile-hamburger" onclick="window.openMobileNav()" style="display:none;" aria-label="Menü">☰</button>
         </nav>
 
         <main class="main-content">
@@ -840,16 +846,18 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 
             <!-- Mobile Hamburger Overlay Nav -->
             <div id="mobile-nav-overlay" onclick="window.closeMobileNav()" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:150; backdrop-filter:blur(4px);"></div>
-            <div id="mobile-nav-drawer" style="display:none; position:fixed; top:0; left:0; bottom:0; width:72%; max-width:280px; background:rgba(12,20,38,0.99); z-index:160; flex-direction:column; padding:20px 12px; gap:8px; overflow-y:auto; backdrop-filter:blur(20px); border-right:1px solid var(--glass-border);">
-                <div style="display:flex; align-items:center; gap:10px; padding:8px 4px 20px; border-bottom:1px solid var(--glass-border); margin-bottom:8px;">
-                    <img src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD" alt="" style="width:36px; border-radius:50%;" onerror="this.style.display='none'">
-                    <div>
-                        <div style="font-size:1rem; font-weight:700; color:#60a5fa;">FC Stern</div>
-                        <div id="mobile-nav-status" style="font-size:0.72rem; color:var(--text-muted);">Lädt...</div>
+            <div id="mobile-nav-drawer" style="display:none; position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:rgba(12,20,38,0.99); z-index:160; flex-direction:column; overflow-y:auto; backdrop-filter:blur(20px); border-right:1px solid var(--glass-border);">
+                <div style="display:flex; align-items:center; gap:10px; padding:20px 16px 16px; border-bottom:1px solid var(--glass-border);">
+                    <div style="flex:1;">
+                        <div style="font-size:1.05rem; font-weight:700; color:#60a5fa;">FC Stern</div>
+                        <div id="mobile-nav-status" style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Lädt...</div>
                     </div>
-                    <button onclick="window.closeMobileNav()" style="margin-left:auto; background:none; border:none; color:var(--text-muted); font-size:1.4rem; cursor:pointer; padding:4px;">✕</button>
+                    <button onclick="window.closeMobileNav()" style="background:rgba(255,255,255,0.08); border:1px solid var(--glass-border); border-radius:8px; color:var(--text-muted); font-size:1rem; cursor:pointer; padding:6px 10px; touch-action:manipulation;">✕</button>
                 </div>
-                <div id="mobile-nav-links"></div>
+                <div id="mobile-nav-links" style="padding:8px; flex:1;"></div>
+                <div id="mobile-drawer-logout" style="padding:12px 16px 32px; border-top:1px solid var(--glass-border); display:none;">
+                    <button onclick="window.authLogout(); window.closeMobileNav();" style="width:100%; padding:12px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:10px; color:#fca5a5; font-family:var(--font-family); font-size:0.9rem; font-weight:600; cursor:pointer; touch-action:manipulation;">🚪 Abmelden</button>
+                </div>
             </div>
 
             <div class="content-sections">
@@ -2131,7 +2139,98 @@ function getTotalFund() {
     return fund;
 }
 
-// ─── Navigation ───────────────────────────────────────────────────────────────
+// ── Mobile Navigation ─────────────────────────────────────────
+const NAV_ITEMS = [
+    { target: 'dashboard', icon: '📊', text: 'Dashboard' },
+    { target: 'spieler',   icon: '👥', text: 'Spieler' },
+    { target: 'spiele',    icon: '🏟️', text: 'Spiele' },
+    { target: 'beitraege', icon: '💶', text: 'Beiträge' },
+    { target: 'strafen',   icon: '⚖️', text: 'Strafen' },
+    { target: 'getraenke', icon: '🍺', text: 'Getränke' },
+    { target: 'ausgaben',  icon: '📉', text: 'Ausgaben' },
+    { target: 'meinkonto', icon: '👤', text: 'Mein Konto', id: 'mnav-meinkonto' },
+    { target: 'nutzer',    icon: '⚙️', text: 'Nutzer',    id: 'mnav-nutzer' },
+];
+
+function _buildMobileNav() {
+    const container = document.getElementById('mobile-nav-links');
+    if (!container) return;
+    container.innerHTML = NAV_ITEMS.map(item => `
+        <div id="${item.id || ''}" data-mtarget="${item.target}"
+            style="display:flex; align-items:center; gap:14px; padding:13px 12px; border-radius:12px;
+                   cursor:pointer; font-weight:500; font-size:0.95rem; margin-bottom:2px;
+                   transition:background 0.15s; touch-action:manipulation;"
+            onclick="window._mobileNavTo('${item.target}')">
+            <span style="font-size:1.3rem; width:26px; text-align:center;">${item.icon}</span>
+            <span>${item.text}</span>
+        </div>
+    `).join('');
+    // Hide admin-only items
+    const mkEl = document.getElementById('mnav-meinkonto');
+    const nuEl = document.getElementById('mnav-nutzer');
+    if (mkEl) mkEl.style.display = window.MY_PLAYER_ID ? '' : 'none';
+    if (nuEl) nuEl.style.display = window.APP_IS_ADMIN ? '' : 'none';
+    // Logout button visibility
+    const logoutBtn = document.getElementById('mobile-drawer-logout');
+    if (logoutBtn) logoutBtn.style.display = window.APP_ROLE !== 'readonly' ? '' : 'none';
+    // Status
+    const statusEl = document.getElementById('mobile-nav-status');
+    if (statusEl) {
+        const badge = document.getElementById('status-badge');
+        statusEl.textContent = badge ? badge.textContent : '';
+    }
+    _updateMobileNavActive();
+}
+
+function _updateMobileNavActive() {
+    const currentTarget = document.querySelector('.nav-links li.active')?.getAttribute('data-target') || 'dashboard';
+    document.querySelectorAll('#mobile-nav-links [data-mtarget]').forEach(el => {
+        const isActive = el.getAttribute('data-mtarget') === currentTarget;
+        el.style.background = isActive ? 'rgba(59,130,246,0.2)' : '';
+        el.style.color = isActive ? '#93c5fd' : '';
+    });
+}
+
+window._mobileNavTo = function(target) {
+    // Trigger same logic as desktop nav
+    document.querySelectorAll('.nav-links li').forEach(l => l.classList.remove('active'));
+    const desktopLink = document.querySelector(`.nav-links li[data-target="${target}"]`);
+    if (desktopLink) desktopLink.classList.add('active');
+    document.querySelectorAll('.section').forEach(s => { s.classList.remove('active'); s.classList.add('hidden'); });
+    const section = document.getElementById(target);
+    if (section) { section.classList.remove('hidden'); section.classList.add('active'); }
+    if (target === 'nutzer') window.loadNutzer();
+    if (target === 'meinkonto') window.loadMeinKonto();
+    if (target === 'spiele') renderGames();
+    if (target === 'spieler') { if (!_duel) window.newDuel(); }
+    _updateMobileNavActive();
+    window.closeMobileNav();
+};
+
+window.openMobileNav = function() {
+    _buildMobileNav();
+    const overlay = document.getElementById('mobile-nav-overlay');
+    const drawer = document.getElementById('mobile-nav-drawer');
+    if (overlay) { overlay.style.display = 'block'; }
+    if (drawer) { drawer.style.display = 'flex'; }
+    document.body.style.overflow = 'hidden';
+};
+
+window.closeMobileNav = function() {
+    const overlay = document.getElementById('mobile-nav-overlay');
+    const drawer = document.getElementById('mobile-nav-drawer');
+    if (overlay) overlay.style.display = 'none';
+    if (drawer) drawer.style.display = 'none';
+    document.body.style.overflow = '';
+};
+
+// Update mobile fund badge when state loads
+function _updateMobileFund() {
+    const el = document.getElementById('mobile-fund-amount');
+    if (el) el.textContent = formatCurrency(getTotalFund());
+}
+
+// ── Navigation ───────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-links li').forEach(link => {
     link.addEventListener('click', (e) => {
         document.querySelectorAll('.nav-links li').forEach(l => l.classList.remove('active'));
@@ -2899,6 +2998,9 @@ function updateUI() {
     // ── UT Karten ──
     renderUTCards();
 
+    // ── Mobile fund badge ──
+    _updateMobileFund();
+
     // ── Spiele & MVP ──
     renderGames();
     renderDashboardMvp();
@@ -3563,588 +3665,3 @@ window.saveUtCard = async function() {
         }
 
         // Also merge into main state so admin sees it on next full save
-        await _utMergeCardIntoMainState(playerId, card);
-        setSyncStatus('saved', '✓ Gespeichert');
-    } catch(e) {
-        console.error('Card save error:', e);
-        setSyncStatus('error', '⚠ Fehler beim Speichern der Karte');
-    }
-};
-
-async function _utCardRowExists(playerId) {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/player_cards?player_id=eq.${encodeURIComponent(playerId)}&select=player_id`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        const rows = await res.json();
-        return Array.isArray(rows) && rows.length > 0;
-    } catch { return false; }
-}
-
-async function _utMergeCardIntoMainState(playerId, card) {
-    // Read current main state, merge card, write back — using anon key (public read/write on app_state)
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        const rows = await res.json();
-        if (!rows || !rows[0]) return;
-        const data = rows[0].data;
-        if (!data.playerCards) data.playerCards = {};
-        data.playerCards[playerId] = card;
-        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
-            method: 'PATCH',
-            headers: {
-                'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json', 'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
-        });
-    } catch(e) { console.error('Merge card into state failed:', e); }
-}
-
-function _renderMkUtCard() {
-    const container = document.getElementById('mk-ut-card-container');
-    if (!container || !window.MY_PLAYER_ID) return;
-    const player = state.players.find(p => p.id === window.MY_PLAYER_ID);
-    if (!player) return;
-    const card = utGetCardData(window.MY_PLAYER_ID);
-    container.innerHTML = utBuildCardHTML(player, card, true, true);
-}
-
-// ══════════════════════════════════════════════════════════════
-// SPIELE & MVP
-// ══════════════════════════════════════════════════════════════
-
-function gamesInit() {
-    if (!state.games) state.games = [];
-    if (!state.mvpVotes) state.mvpVotes = {}; // gameId -> { playerId: count, voters: [email] }
-}
-
-window.addGame = function() {
-    gamesInit();
-    const opponent = document.getElementById('game-opponent').value.trim();
-    const date = document.getElementById('game-date').value;
-    const result = document.getElementById('game-result').value.trim();
-    if (!opponent || !date) { alert('Bitte Gegner und Datum angeben.'); return; }
-    state.games.push({
-        id: generateId(),
-        opponent, date, result: result || '',
-        mvpDeadline: new Date(new Date(date).getTime() + 3 * 86400000).toISOString()
-    });
-    document.getElementById('game-opponent').value = '';
-    document.getElementById('game-result').value = '';
-    saveState();
-    renderGames();
-};
-
-window.deleteGame = function(gameId) {
-    if (!confirm('Spiel wirklich löschen?')) return;
-    state.games = state.games.filter(g => g.id !== gameId);
-    delete state.mvpVotes[gameId];
-    saveState();
-    renderGames();
-};
-
-window.voteForMvp = function(gameId, playerId) {
-    gamesInit();
-    const session = JSON.parse(localStorage.getItem('mkasse_session') || '{}');
-    const voterEmail = session.email || null;
-    if (!voterEmail) { alert('Du musst eingeloggt sein um abzustimmen.'); return; }
-
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    const now = new Date();
-    if (new Date(game.mvpDeadline) < now) { alert('Die Abstimmung für dieses Spiel ist bereits beendet.'); return; }
-
-    if (!state.mvpVotes[gameId]) state.mvpVotes[gameId] = { votes: {}, voters: [] };
-    const voteData = state.mvpVotes[gameId];
-
-    if (voteData.voters.includes(voterEmail)) {
-        alert('Du hast für dieses Spiel bereits abgestimmt!');
-        return;
-    }
-
-    voteData.votes[playerId] = (voteData.votes[playerId] || 0) + 1;
-    voteData.voters.push(voterEmail);
-    saveState();
-    renderGames();
-    renderDashboardMvp();
-};
-
-function utMvpCountdown(deadline) {
-    const diff = deadline - new Date();
-    if (diff <= 0) return null;
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    if (h >= 48) return `${Math.ceil(h/24)} Tage`;
-    if (h >= 1)  return `${h}h ${m}m`;
-    return `${m} Minute${m !== 1 ? 'n' : ''}`;
-}
-
-function getMvpWinner(gameId) {
-    if (!state.mvpVotes || !state.mvpVotes[gameId]) return null;
-    const votes = state.mvpVotes[gameId].votes || {};
-    if (Object.keys(votes).length === 0) return null;
-    const winnerId = Object.entries(votes).sort((a, b) => b[1] - a[1])[0][0];
-    return { playerId: winnerId, count: votes[winnerId] };
-}
-
-function renderGames() {
-    gamesInit();
-    renderActiveVotes();
-    const container = document.getElementById('games-list');
-    if (!container) return;
-    const sorted = [...state.games].sort((a, b) => new Date(b.date) - new Date(a.date));
-    if (sorted.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted); padding:16px;">Noch keine Spiele eingetragen.</p>';
-        return;
-    }
-    const session = JSON.parse(localStorage.getItem('mkasse_session') || '{}');
-    const voterEmail = session.email || '';
-    const now = new Date();
-
-    container.innerHTML = sorted.map(game => {
-        const deadline = new Date(game.mvpDeadline);
-        const isOpen = deadline > now;
-        const voteData = (state.mvpVotes[game.id] || {});
-        const votes = voteData.votes || {};
-        const voters = voteData.voters || [];
-        const hasVoted = voters.includes(voterEmail);
-        const totalVotes = Object.values(votes).reduce((s, n) => s + n, 0);
-        const winner = getMvpWinner(game.id);
-        const winnerPlayer = winner ? state.players.find(p => p.id === winner.playerId) : null;
-
-        let mvpSection = '';
-        // Build leading player info for open votes
-        const leadingPlayer = totalVotes > 0 ? state.players.find(p => p.id === winner?.playerId) : null;
-        const leadingCard = leadingPlayer ? utGetCardData(leadingPlayer.id) : null;
-        const leadingHint = leadingPlayer && totalVotes > 0
-            ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 12px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:10px;">
-                <div style="transform:scale(0.45);transform-origin:left center;width:90px;height:${0.45*280}px;overflow:hidden;flex-shrink:0;">${utBuildCardHTML(leadingPlayer, leadingCard, false, false)}</div>
-                <div>
-                    <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:2px;">⚡ Aktuell führt</p>
-                    <p style="font-size:0.95rem;font-weight:800;color:#fbbf24;">${leadingPlayer.name.split(' ').pop()}</p>
-                    <p style="font-size:0.75rem;color:var(--text-muted);">${winner.count} von ${totalVotes} Stimme(n)</p>
-                </div>
-            </div>`
-            : `<p style="font-size:0.82rem;color:var(--text-muted);margin-top:8px;">Noch keine Stimmen.</p>`;
-
-        if (isOpen && !hasVoted) {
-            const playerBtns = [...state.players].sort((a,b) => a.name.localeCompare(b.name)).map(p => {
-                const v = votes[p.id] || 0;
-                return `<button class="btn btn-outline btn-small" onclick="window.voteForMvp('${game.id}','${p.id}')"
-                    style="font-size:0.8rem; padding:6px 10px;">⭐ ${p.name}${v > 0 ? ` (${v})` : ''}</button>`;
-            }).join('');
-            mvpSection = `<div style="margin-top:12px;">
-                <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">🗳️ MVP wählen – noch <strong style="color:#fbbf24;">${utMvpCountdown(deadline)}</strong></p>
-                <div style="display:flex; flex-wrap:wrap; gap:6px;">${playerBtns}</div>
-                ${leadingHint}
-            </div>`;
-        } else if (isOpen && hasVoted) {
-            mvpSection = `<div style="margin-top:10px;">
-                <p style="font-size:0.85rem; color:var(--text-muted);">✅ Du hast abgestimmt · ${totalVotes} Stimme(n) · noch <strong style="color:#fbbf24;">${utMvpCountdown(deadline)}</strong></p>
-                ${leadingHint}
-            </div>`;
-        } else if (winnerPlayer) {
-            const card = utGetCardData(winnerPlayer.id);
-            const miniCard = utBuildCardHTML(winnerPlayer, card, false, false);
-            mvpSection = `<div style="margin-top:12px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                <div style="transform:scale(0.6); transform-origin:left center; height:168px;">${miniCard}</div>
-                <div>
-                    <p style="font-size:1rem; font-weight:700; color:#fbbf24;">🏆 MVP: ${winnerPlayer.name}</p>
-                    <p style="font-size:0.82rem; color:var(--text-muted);">${winner.count} von ${totalVotes} Stimme(n)</p>
-                </div>
-            </div>`;
-        } else {
-            mvpSection = `<div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);">Keine Stimmen abgegeben.</div>`;
-        }
-
-        return `<div class="glass-panel" style="padding:16px 20px; border-radius:12px;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
-                <div>
-                    <strong style="font-size:1.05rem;">⚽ vs. ${game.opponent}</strong>
-                    ${game.result ? `<span style="margin-left:10px; font-size:0.9rem; color:var(--success); font-weight:700;">${game.result}</span>` : ''}
-                    <br><span style="font-size:0.82rem; color:var(--text-muted);">${new Date(game.date).toLocaleDateString('de-DE')}</span>
-                </div>
-                <div style="display:flex;gap:6px;" class="edit-only">
-                    <button class="btn btn-outline btn-small" onclick="window.openGameStats('${game.id}')">📊 Details</button>
-                    <button class="btn btn-danger btn-small" onclick="window.deleteGame('${game.id}')">🗑️</button>
-                </div>
-            </div>
-            ${_renderGameStatsInline(game)}
-            ${mvpSection}
-        </div>`;
-    }).join('');
-}
-
-function renderActiveVotes() {
-    const container = document.getElementById('mvp-active-votes');
-    if (!container) return;
-    gamesInit();
-    const now = new Date();
-    const open = state.games.filter(g => new Date(g.mvpDeadline) > now);
-    if (open.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">Keine laufenden Abstimmungen.</p>';
-        return;
-    }
-    container.innerHTML = open.map(g => {
-        const deadline = new Date(g.mvpDeadline);
-        const votes = (state.mvpVotes[g.id] || {}).votes || {};
-        const total = Object.values(votes).reduce((s,n) => s+n, 0);
-        return `<div class="list-item">
-            <div style="display:flex;flex-direction:column;gap:3px;">
-                <strong>vs. ${g.opponent}</strong>
-                <span style="font-size:0.82rem; color:var(--text-muted);">${new Date(g.date).toLocaleDateString('de-DE')} · ${total} Stimme(n)</span>
-            </div>
-            <span style="font-size:0.8rem; color:#fbbf24; font-weight:600;">⏳ ${utMvpCountdown(deadline)}</span>
-        </div>`;
-    }).join('');
-}
-
-function renderDashboardMvp() {
-    const container = document.getElementById('dash-mvp-votes');
-    if (!container) return;
-    gamesInit();
-    const now = new Date();
-    const sorted = [...state.games].sort((a,b) => new Date(b.date) - new Date(a.date));
-
-    if (sorted.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">Noch keine Spiele eingetragen.</p>';
-        return;
-    }
-
-    const latest = sorted[0];
-    const deadline = new Date(latest.mvpDeadline);
-    const isOpen = deadline > now;
-    const winner = getMvpWinner(latest.id);
-    const winnerPlayer = winner ? state.players.find(p => p.id === winner.playerId) : null;
-    const totalVotes = Object.values((state.mvpVotes[latest.id] || {}).votes || {}).reduce((s,n) => s+n, 0);
-
-    let latestHTML = `<div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px;">
-        <strong style="color:var(--text-main);">${latest.result ? latest.result + ' ' : ''}vs. ${latest.opponent}</strong>
-        · ${new Date(latest.date).toLocaleDateString('de-DE')}
-    </div>`;
-
-    if (winnerPlayer) {
-        const card = utGetCardData(winnerPlayer.id);
-        const cardHTML = utBuildCardHTML(winnerPlayer, card, false, false);
-        const label = isOpen ? `⚡ Führt aktuell · ${winner.count}/${totalVotes} Stimmen · noch ${utMvpCountdown(deadline)}` : `🏆 MVP · ${winner.count}/${totalVotes} Stimmen`;
-        latestHTML += `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;min-height:180px;">
-            <div style="transform:scale(0.55);transform-origin:left top;width:${Math.round(0.55*200)}px;height:${Math.round(0.55*310)}px;overflow:visible;flex-shrink:0;margin-bottom:0;">${cardHTML}</div>
-            <div>
-                <p style="font-size:1.05rem;font-weight:800;color:#fbbf24;">${winnerPlayer.name}</p>
-                <p style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">${label}</p>
-            </div>
-        </div>`;
-    } else {
-        latestHTML += `<p style="font-size:0.85rem;color:var(--text-muted);">
-            ${isOpen ? `🗳️ Abstimmung läuft · ${totalVotes} Stimmen · noch ${utMvpCountdown(deadline)}` : 'Keine Stimmen abgegeben.'}
-        </p>`;
-    }
-
-    // Past MVPs
-    const pastGames = sorted.slice(1).filter(g => new Date(g.mvpDeadline) <= now);
-    let pastHTML = '';
-    if (pastGames.length > 0) {
-        pastHTML = `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--glass-border);">
-            <p style="font-size:0.75rem;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:8px;">Vergangene MVPs</p>
-            ${pastGames.slice(0, 4).map(game => {
-                const w = getMvpWinner(game.id);
-                const wp = w ? state.players.find(p => p.id === w.playerId) : null;
-                const tv = Object.values((state.mvpVotes[game.id] || {}).votes || {}).reduce((s,n)=>s+n,0);
-                return `<div class="list-item" style="padding:8px 12px;">
-                    <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
-                        <strong style="font-size:0.85rem;">${game.result ? game.result + ' ' : ''}vs. ${game.opponent}</strong>
-                        <span style="font-size:0.75rem;color:var(--text-muted);">${new Date(game.date).toLocaleDateString('de-DE')}</span>
-                    </div>
-                    ${wp
-                        ? `<span style="color:#fbbf24;font-weight:700;font-size:0.85rem;">🏆 ${wp.name.split(' ').pop()}</span>`
-                        : `<span style="color:var(--text-muted);font-size:0.8rem;">–</span>`
-                    }
-                </div>`;
-            }).join('')}
-        </div>`;
-    }
-
-    container.innerHTML = latestHTML + pastHTML;
-}
-
-// ══════════════════════════════════════════════════════════════
-// DUELL — Wer ist besser?
-// ══════════════════════════════════════════════════════════════
-
-const DUEL_ATTRS = [
-    { key: 'tempo',    label: 'Tempo',    icon: '⚡' },
-    { key: 'schuss',   label: 'Schuss',   icon: '🎯' },
-    { key: 'pass',     label: 'Passspiel',icon: '🎪' },
-    { key: 'dribbling',label: 'Dribbling',icon: '🕹️' },
-    { key: 'abwehr',   label: 'Abwehr',   icon: '🛡️' },
-    { key: 'physisch', label: 'Physis',   icon: '💪' },
-];
-
-let _duel = null; // { playerA, playerB, attr, votes: {a, b}, voted: bool }
-
-window.newDuel = function() {
-    if (state.players.length < 2) return;
-    const shuffled = [...state.players].sort(() => Math.random() - 0.5);
-    const playerA = shuffled[0];
-    const playerB = shuffled[1];
-    const attr = DUEL_ATTRS[Math.floor(Math.random() * DUEL_ATTRS.length)];
-
-    // Load existing votes from state
-    if (!state.duels) state.duels = {};
-    const key = `${[playerA.id, playerB.id].sort().join('_')}__${attr.key}`;
-    const existing = state.duels[key] || { a: 0, b: 0 };
-
-    _duel = { playerA, playerB, attr, key, votes: { ...existing }, voted: false };
-    renderDuel();
-};
-
-window.voteDuel = async function(side) {
-    if (!_duel || _duel.voted) return;
-    _duel.votes[side]++;
-    _duel.voted = true;
-
-    // Persist
-    if (!state.duels) state.duels = {};
-    state.duels[_duel.key] = { ..._duel.votes };
-    renderDuel();
-    await _utMergeCardIntoMainState(null, null); // reuse state merger — but we need a full merge
-    _saveDuelToState();
-};
-
-async function _saveDuelToState() {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        const rows = await res.json();
-        if (!rows || !rows[0]) return;
-        const data = rows[0].data;
-        if (!data.duels) data.duels = {};
-        data.duels[_duel.key] = { ..._duel.votes };
-        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
-            method: 'PATCH',
-            headers: {
-                'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json', 'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
-        });
-        setSyncStatus('saved', '✓ Gespeichert');
-    } catch(e) { console.error('Duel save error:', e); }
-}
-
-function renderDuel() {
-    const container = document.getElementById('duel-container');
-    if (!container || !_duel) return;
-    const { playerA, playerB, attr, votes, voted } = _duel;
-    const cardA = utGetCardData(playerA.id);
-    const cardB = utGetCardData(playerB.id);
-    const valA = cardA[attr.key] || 70;
-    const valB = cardB[attr.key] || 70;
-    const total = votes.a + votes.b;
-    const pctA = total > 0 ? Math.round(votes.a / total * 100) : 50;
-    const pctB = total > 0 ? Math.round(votes.b / total * 100) : 50;
-
-    const winnerSide = voted && total > 0 ? (votes.a >= votes.b ? 'a' : 'b') : null;
-
-    const cardHtmlA = utBuildCardHTML(playerA, cardA, false, false);
-    const cardHtmlB = utBuildCardHTML(playerB, cardB, false, false);
-
-    container.innerHTML = `
-        <div class="duel-card-wrap">
-            <div class="duel-card-scaled">${cardHtmlA}</div>
-            <div class="duel-attr">${attr.icon} ${attr.label}: ${valA}</div>
-            ${voted ? `
-                <div class="duel-result-bar"><div class="duel-result-fill" style="width:${pctA}%"></div></div>
-                <div class="duel-result-pct">${votes.a} Stimme${votes.a !== 1 ? 'n' : ''} (${pctA}%)</div>
-            ` : ''}
-            <button class="duel-vote-btn ${winnerSide === 'a' ? 'winner' : winnerSide === 'b' ? 'loser' : ''}"
-                onclick="window.voteDuel('a')" ${voted ? 'disabled' : ''}>
-                👑 ${playerA.name.split(' ').pop()}
-            </button>
-        </div>
-
-        <div class="duel-vs">VS</div>
-
-        <div class="duel-card-wrap">
-            <div class="duel-card-scaled">${cardHtmlB}</div>
-            <div class="duel-attr">${attr.icon} ${attr.label}: ${valB}</div>
-            ${voted ? `
-                <div class="duel-result-bar"><div class="duel-result-fill" style="width:${pctB}%"></div></div>
-                <div class="duel-result-pct">${votes.b} Stimme${votes.b !== 1 ? 'n' : ''} (${pctB}%)</div>
-            ` : ''}
-            <button class="duel-vote-btn ${winnerSide === 'b' ? 'winner' : winnerSide === 'a' ? 'loser' : ''}"
-                onclick="window.voteDuel('b')" ${voted ? 'disabled' : ''}>
-                👑 ${playerB.name.split(' ').pop()}
-            </button>
-        </div>
-    `;
-
-    // Auto-show next duel button after voting
-    if (voted) {
-        const next = document.createElement('div');
-        next.style.cssText = 'width:100%; text-align:center; margin-top:16px;';
-        next.innerHTML = `<button class="btn btn-outline" onclick="window.newDuel()">🎲 Nächstes Duell</button>`;
-        container.appendChild(next);
-    }
-}
-
-// ══════════════════════════════════════════════════════════════
-// SPIELDETAILS — Tore, Assists, Karten
-// ══════════════════════════════════════════════════════════════
-
-function _renderGameStatsInline(game) {
-    const goals = game.goals || [];
-    const cards = game.cards || [];
-    if (goals.length === 0 && cards.length === 0) return '';
-
-    const cardIcon = { yellow: '🟨', yellowred: '🟨🔴', red: '🔴' };
-    const playerName = id => {
-        const p = state.players.find(p => p.id === id);
-        return p ? p.name.split(' ').pop() : '?';
-    };
-
-    let html = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--glass-border); display:flex; flex-wrap:wrap; gap:6px 16px;">';
-
-    goals.forEach(g => {
-        html += `<span style="font-size:0.82rem;">⚽ <strong>${playerName(g.scorerId)}</strong>`;
-        if (g.assistId) html += ` <span style="color:var(--text-muted);">(🎯 ${playerName(g.assistId)})</span>`;
-        if (g.minute) html += ` <span style="color:var(--text-muted);">${g.minute}'</span>`;
-        html += '</span>';
-    });
-
-    cards.forEach(c => {
-        html += `<span style="font-size:0.82rem;">${cardIcon[c.type] || '🟨'} <strong>${playerName(c.playerId)}</strong>`;
-        if (c.minute) html += ` <span style="color:var(--text-muted);">${c.minute}'</span>`;
-        html += '</span>';
-    });
-
-    html += '</div>';
-    return html;
-}
-
-window.openGameStats = function(gameId) {
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    document.getElementById('game-stats-id').value = gameId;
-    document.getElementById('game-stats-title').textContent = `⚽ vs. ${game.opponent} — Details`;
-    _renderGoalRows(game.goals || []);
-    _renderCardRows(game.cards || []);
-    document.getElementById('modal-game-stats').classList.remove('hidden');
-};
-
-function _playerOptions(selectedId = '') {
-    return '<option value="">– Spieler –</option>' +
-        [...state.players].sort((a,b) => a.name.localeCompare(b.name))
-            .map(p => `<option value="${p.id}" ${p.id === selectedId ? 'selected' : ''}>${p.name}</option>`)
-            .join('');
-}
-
-function _renderGoalRows(goals) {
-    const container = document.getElementById('goals-list');
-    if (!container) return;
-    if (goals.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Tore eingetragen.</p>';
-        return;
-    }
-    container.innerHTML = goals.map((g, i) => `
-        <div class="game-stat-row" data-index="${i}" style="display:grid; grid-template-columns:1fr 1fr 60px 36px; gap:6px; align-items:center;">
-            <select class="goal-scorer" onchange="window._goalChanged(${i},'scorerId',this.value)">${_playerOptions(g.scorerId)}</select>
-            <select class="goal-assist" onchange="window._goalChanged(${i},'assistId',this.value)">
-                <option value="">– kein Assist –</option>
-                ${[...state.players].sort((a,b) => a.name.localeCompare(b.name))
-                    .map(p => `<option value="${p.id}" ${p.id === g.assistId ? 'selected' : ''}>${p.name}</option>`).join('')}
-            </select>
-            <input type="number" min="1" max="120" placeholder="Min" value="${g.minute || ''}"
-                onchange="window._goalChanged(${i},'minute',this.value)"
-                style="padding:8px 6px; font-size:0.85rem;">
-            <button class="btn btn-danger btn-small" onclick="window._removeGoal(${i})" style="padding:6px 8px;">✕</button>
-        </div>`).join('');
-}
-
-window._tempGoals = [];
-window._tempCards = [];
-
-window.addGoalRow = function() {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    if (!game.goals) game.goals = [];
-    game.goals.push({ scorerId: '', assistId: '', minute: '' });
-    _renderGoalRows(game.goals);
-};
-
-window._goalChanged = function(idx, field, val) {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game || !game.goals[idx]) return;
-    game.goals[idx][field] = val;
-};
-
-window._removeGoal = function(idx) {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    game.goals.splice(idx, 1);
-    _renderGoalRows(game.goals);
-};
-
-function _renderCardRows(cards) {
-    const container = document.getElementById('cards-list');
-    if (!container) return;
-    if (cards.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Karten eingetragen.</p>';
-        return;
-    }
-    container.innerHTML = cards.map((c, i) => `
-        <div style="display:grid; grid-template-columns:1fr 120px 60px 36px; gap:6px; align-items:center;">
-            <select onchange="window._cardChanged(${i},'playerId',this.value)">${_playerOptions(c.playerId)}</select>
-            <select onchange="window._cardChanged(${i},'type',this.value)">
-                <option value="yellow"  ${c.type==='yellow'    ?'selected':''}>🟨 Gelb</option>
-                <option value="yellowred" ${c.type==='yellowred'?'selected':''}>🟨🔴 Gelb-Rot</option>
-                <option value="red"     ${c.type==='red'       ?'selected':''}>🔴 Rot</option>
-            </select>
-            <input type="number" min="1" max="120" placeholder="Min" value="${c.minute || ''}"
-                onchange="window._cardChanged(${i},'minute',this.value)"
-                style="padding:8px 6px; font-size:0.85rem;">
-            <button class="btn btn-danger btn-small" onclick="window._removeCard(${i})" style="padding:6px 8px;">✕</button>
-        </div>`).join('');
-}
-
-window.addCardRow = function() {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    if (!game.cards) game.cards = [];
-    game.cards.push({ playerId: '', type: 'yellow', minute: '' });
-    _renderCardRows(game.cards);
-};
-
-window._cardChanged = function(idx, field, val) {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game || !game.cards[idx]) return;
-    game.cards[idx][field] = val;
-};
-
-window._removeCard = function(idx) {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    game.cards.splice(idx, 1);
-    _renderCardRows(game.cards);
-};
-
-window.saveGameStats = function() {
-    hideAllModals();
-    saveState();
-    renderGames();
-};
-
-    </script>
-</body>
-
-</html>
