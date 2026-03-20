@@ -291,7 +291,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 }
 .ut-card {
     width: 200px;
-    height: 280px;
+    height: 310px;
     border-radius: 12px;
     position: relative;
     cursor: pointer;
@@ -340,17 +340,17 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 }
 .ut-card-avatar {
     width: 100%;
-    height: 130px;
+    height: 160px;
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    font-size: 4rem;
+    font-size: 5rem;
     filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
     margin-top: -4px;
 }
 .ut-card-avatar img {
     width: 100%;
-    height: 130px;
+    height: 160px;
     object-fit: contain;
     object-position: bottom center;
     display: block;
@@ -441,7 +441,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 @media (max-width: 500px) {
     .ut-edit-preview .ut-card {
         transform: scale(0.75);
-        margin-bottom: -56px;
+        margin-bottom: -78px;
     }
     .ut-attr-grid { grid-template-columns: 1fr; }
     .ut-attr-row input[type=range] { height: 20px; }
@@ -2879,15 +2879,15 @@ function updateUI() {
             topDrinksList.innerHTML = '<li class="list-item" style="color:var(--text-muted)">Noch keine Getränke verbucht.</li>';
         } else {
             const medals = ['🥇','🥈','🥉'];
-            topDrinksList.style.cssText = 'display:flex; flex-direction:row; gap:12px; align-items:flex-end; justify-content:center; flex-wrap:wrap; padding:8px 0;';
+            const scales = [0.85, 0.72, 0.72];
+            topDrinksList.style.cssText = 'display:flex; flex-direction:row; gap:16px; align-items:flex-end; justify-content:center; flex-wrap:wrap; padding:12px 0 4px;';
             topDrinksList.innerHTML = drinkRanking.map((d, i) => {
                 const card = utGetCardData(d.player.id);
                 const cardHTML = utBuildCardHTML(d.player, card, false, false);
-                const scale = i === 0 ? 0.72 : 0.62;
-                const mb = i === 0 ? 0 : -14;
-                return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-                    <div style="transform:scale(${scale});transform-origin:bottom center;margin-bottom:${(scale-1)*280}px;">${cardHTML}</div>
-                    <span style="font-size:0.95rem;font-weight:800;color:var(--text-main);">${medals[i]} ${d.qty}x 🍺</span>
+                const s = scales[i];
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                    <div style="transform:scale(${s});transform-origin:bottom center;margin-top:${(s-1)*310}px;">${cardHTML}</div>
+                    <span style="font-size:1rem;font-weight:800;color:var(--text-main);">${medals[i]} ${d.qty}x 🍺</span>
                 </div>`;
             }).join('');
         }
@@ -3681,37 +3681,68 @@ function renderDashboardMvp() {
     if (!container) return;
     gamesInit();
     const now = new Date();
-    const recentGames = [...state.games]
-        .sort((a,b) => new Date(b.date) - new Date(a.date))
-        .slice(0, 5);
+    const sorted = [...state.games].sort((a,b) => new Date(b.date) - new Date(a.date));
 
-    if (recentGames.length === 0) {
+    if (sorted.length === 0) {
         container.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">Noch keine Spiele eingetragen.</p>';
         return;
     }
 
-    container.innerHTML = recentGames.map(game => {
-        const deadline = new Date(game.mvpDeadline);
-        const isOpen = deadline > now;
-        const winner = getMvpWinner(game.id);
-        const winnerPlayer = winner ? state.players.find(p => p.id === winner.playerId) : null;
-        const totalVotes = Object.values((state.mvpVotes[game.id] || {}).votes || {}).reduce((s,n) => s+n, 0);
+    const latest = sorted[0];
+    const deadline = new Date(latest.mvpDeadline);
+    const isOpen = deadline > now;
+    const winner = getMvpWinner(latest.id);
+    const winnerPlayer = winner ? state.players.find(p => p.id === winner.playerId) : null;
+    const totalVotes = Object.values((state.mvpVotes[latest.id] || {}).votes || {}).reduce((s,n) => s+n, 0);
 
-        return `<div class="list-item">
-            <div style="display:flex;flex-direction:column;gap:3px;flex:1;">
-                <strong>${game.result ? game.result + ' ' : ''}vs. ${game.opponent}</strong>
-                <span style="font-size:0.82rem; color:var(--text-muted);">${new Date(game.date).toLocaleDateString('de-DE')}</span>
-            </div>
-            <div style="text-align:right;">
-                ${isOpen
-                    ? `<span style="color:#fbbf24; font-size:0.82rem; font-weight:600;">⏳ ${utMvpCountdown(deadline)} (${totalVotes})</span>`
-                    : winnerPlayer
-                        ? `<span style="color:#fbbf24; font-weight:700;">🏆 ${winnerPlayer.name.split(' ').pop()}</span>`
-                        : `<span style="color:var(--text-muted); font-size:0.82rem;">Keine Stimmen</span>`
-                }
+    let latestHTML = `<div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px;">
+        <strong style="color:var(--text-main);">${latest.result ? latest.result + ' ' : ''}vs. ${latest.opponent}</strong>
+        · ${new Date(latest.date).toLocaleDateString('de-DE')}
+    </div>`;
+
+    if (winnerPlayer) {
+        const card = utGetCardData(winnerPlayer.id);
+        const cardHTML = utBuildCardHTML(winnerPlayer, card, false, false);
+        const label = isOpen ? `⚡ Führt aktuell · ${winner.count}/${totalVotes} Stimmen · noch ${utMvpCountdown(deadline)}` : `🏆 MVP · ${winner.count}/${totalVotes} Stimmen`;
+        const color = isOpen ? '#fbbf24' : '#fbbf24';
+        latestHTML += `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div style="transform:scale(0.55);transform-origin:left center;width:${0.55*200}px;height:${0.55*310}px;overflow:visible;flex-shrink:0;">${cardHTML}</div>
+            <div>
+                <p style="font-size:1.05rem;font-weight:800;color:#fbbf24;">${winnerPlayer.name}</p>
+                <p style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">${label}</p>
             </div>
         </div>`;
-    }).join('');
+    } else {
+        latestHTML += `<p style="font-size:0.85rem;color:var(--text-muted);">
+            ${isOpen ? `🗳️ Abstimmung läuft · ${totalVotes} Stimmen · noch ${utMvpCountdown(deadline)}` : 'Keine Stimmen abgegeben.'}
+        </p>`;
+    }
+
+    // Past MVPs
+    const pastGames = sorted.slice(1).filter(g => new Date(g.mvpDeadline) <= now);
+    let pastHTML = '';
+    if (pastGames.length > 0) {
+        pastHTML = `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--glass-border);">
+            <p style="font-size:0.75rem;color:var(--text-muted);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:8px;">Vergangene MVPs</p>
+            ${pastGames.slice(0, 4).map(game => {
+                const w = getMvpWinner(game.id);
+                const wp = w ? state.players.find(p => p.id === w.playerId) : null;
+                const tv = Object.values((state.mvpVotes[game.id] || {}).votes || {}).reduce((s,n)=>s+n,0);
+                return `<div class="list-item" style="padding:8px 12px;">
+                    <div style="display:flex;flex-direction:column;gap:2px;flex:1;">
+                        <strong style="font-size:0.85rem;">${game.result ? game.result + ' ' : ''}vs. ${game.opponent}</strong>
+                        <span style="font-size:0.75rem;color:var(--text-muted);">${new Date(game.date).toLocaleDateString('de-DE')}</span>
+                    </div>
+                    ${wp
+                        ? `<span style="color:#fbbf24;font-weight:700;font-size:0.85rem;">🏆 ${wp.name.split(' ').pop()}</span>`
+                        : `<span style="color:var(--text-muted);font-size:0.8rem;">–</span>`
+                    }
+                </div>`;
+            }).join('')}
+        </div>`;
+    }
+
+    container.innerHTML = latestHTML + pastHTML;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -3799,7 +3830,7 @@ function renderDuel() {
 
     container.innerHTML = `
         <div class="duel-card-wrap">
-            <div style="transform:scale(0.85); transform-origin:bottom center; margin-bottom:-24px;">${cardHtmlA}</div>
+            <div style="transform:scale(0.82); transform-origin:top center; margin-bottom:${0.82*310 - 310}px;">${cardHtmlA}</div>
             <div class="duel-attr">${attr.icon} ${attr.label}: ${valA}</div>
             ${voted ? `
                 <div class="duel-result-bar"><div class="duel-result-fill" style="width:${pctA}%"></div></div>
@@ -3814,7 +3845,7 @@ function renderDuel() {
         <div class="duel-vs">VS</div>
 
         <div class="duel-card-wrap">
-            <div style="transform:scale(0.85); transform-origin:bottom center; margin-bottom:-24px;">${cardHtmlB}</div>
+            <div style="transform:scale(0.82); transform-origin:top center; margin-bottom:${0.82*310 - 310}px;">${cardHtmlB}</div>
             <div class="duel-attr">${attr.icon} ${attr.label}: ${valB}</div>
             ${voted ? `
                 <div class="duel-result-bar"><div class="duel-result-fill" style="width:${pctB}%"></div></div>
