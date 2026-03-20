@@ -131,155 +131,232 @@ body.role-strafen .ausgaben-only { display: none !important; }
 /* Getränke role: hide non-getraenke edit controls */
 body.role-getraenke .strafen-only { display: none !important; }
 body.role-getraenke .ausgaben-only { display: none !important; }
+/* ════════════════════════════════════════════════════════
+   MOBILE — komplette Überarbeitung
+   ════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
-    /* ── Layout ── */
-    body { overflow: auto; }
+
+    /* ── Basis ── */
+    body { overflow-x: hidden; overflow-y: auto; }
+
     .app-container {
         flex-direction: column;
         padding: 0;
         gap: 0;
         height: auto;
         min-height: 100vh;
-        padding-bottom: 72px; /* space for bottom nav */
+        padding-bottom: 80px;
+        overflow: visible;
     }
 
-    /* ── Sidebar wird zur Top-Bar ── */
+    /* ════ SIDEBAR → kompakte Header-Leiste ════ */
     .sidebar {
         width: 100%;
         height: auto;
-        padding: 12px 16px 8px;
-        border-radius: 0;
-        border-bottom: 1px solid var(--glass-border);
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
+        padding: 10px 16px;
+        border-radius: 0;
+        border-bottom: 1px solid var(--glass-border);
         position: sticky;
         top: 0;
         z-index: 50;
-        background: rgba(15,23,42,0.95);
-        backdrop-filter: blur(16px);
+        background: rgba(12, 20, 38, 0.97);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        gap: 12px;
     }
-    .sidebar-header { margin: 0; display: flex; align-items: center; gap: 10px; }
-    .sidebar-header h2 { font-size: 1.1rem; margin-bottom: 0; }
-    .sidebar-logo { width: 36px; margin: 0; display: block; }
+    .sidebar-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+    }
+    .sidebar-header h2 {
+        font-size: 1rem;
+        margin-bottom: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sidebar-logo { width: 32px; margin: 0; flex-shrink: 0; }
 
-    /* ── Nav links → fixed bottom bar ── */
+    /* ════ NAVIGATION → fixierte Bottom-Bar ════ */
     .nav-links {
         position: fixed;
         bottom: 0; left: 0; right: 0;
-        z-index: 100;
+        z-index: 200;
         display: flex;
         flex-direction: row;
-        gap: 0;
-        background: rgba(15,23,42,0.97);
-        backdrop-filter: blur(20px);
-        border-top: 1px solid var(--glass-border);
-        padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+        background: rgba(10, 17, 32, 0.98);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border-top: 1px solid rgba(255,255,255,0.08);
+        padding: 4px 4px max(8px, env(safe-area-inset-bottom));
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 2px;
     }
     .nav-links::-webkit-scrollbar { display: none; }
     .nav-links li {
         flex: 1;
-        min-width: 52px;
-        padding: 6px 4px;
+        min-width: 50px;
+        max-width: 80px;
+        padding: 5px 2px;
         border-radius: 10px;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 3px;
-        font-size: 0.6rem;
-        font-weight: 600;
-        letter-spacing: 0.2px;
-        margin: 2px;
+        gap: 2px;
+        margin: 0;
+        transition: background 0.15s;
     }
-    .nav-links li .icon { font-size: 1.3rem; line-height: 1; }
-    .nav-links li .text { display: block; font-size: 0.58rem; opacity: 0.8; }
-    .nav-links li.active .text { opacity: 1; }
+    .nav-links li .icon { font-size: 1.25rem; line-height: 1.2; }
+    .nav-links li .text {
+        display: block;
+        font-size: 0.55rem;
+        font-weight: 600;
+        opacity: 0.65;
+        letter-spacing: 0.1px;
+        text-align: center;
+    }
+    .nav-links li.active { background: rgba(59,130,246,0.2); }
+    .nav-links li.active .text { opacity: 1; color: #93c5fd; }
+    .nav-links li.active .icon { filter: brightness(1.3); }
 
-    /* ── Main content ── */
+    /* ════ MAIN CONTENT ════ */
     .main-content {
         flex: 1;
-        gap: 12px;
         overflow: visible;
+        gap: 0;
         padding: 0;
     }
 
-    /* ── Top bar ── */
+    /* ── Top-Bar (Kassenstand-Leiste) ── */
     .top-bar {
         border-radius: 0;
-        padding: 10px 14px;
+        padding: 10px 16px;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
+        border-bottom: 1px solid var(--glass-border);
     }
-    .top-bar h1 { font-size: 1rem; }
-    .kassenstand { font-size: 1rem; }
-    .kassenstand strong { font-size: 1.3rem; }
+    .top-bar h1 { font-size: 0.9rem; color: var(--text-muted); font-weight: 400; }
+    .kassenstand { gap: 8px; }
+    .kassenstand span { font-size: 0.85rem; }
+    .kassenstand strong { font-size: 1.4rem; }
+    /* PDF + Status Badge kleiner */
+    .top-bar .btn { padding: 6px 10px; font-size: 0.8rem; }
+    #status-badge { font-size: 0.72rem; padding: 4px 8px; }
 
-    /* ── Content sections ── */
+    /* ── Content-Sections ── */
     .content-sections {
         border-radius: 0;
         overflow: visible;
-        padding: 0 0 16px 0;
+        padding: 12px 12px 16px;
     }
 
-    /* ── Cards & grids ── */
-    .card { padding: 16px; margin-bottom: 12px; border-radius: 12px; }
-    .dashboard-grid { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-    .grid-2-col { grid-template-columns: 1fr; gap: 12px; }
-    .summary-card { padding: 14px; }
-    .big-number { font-size: 1.8rem; }
+    /* ════ KACHELN: alle full-width, keine 2-Spalten ════ */
+    .dashboard-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .grid-2-col { grid-template-columns: 1fr; gap: 10px; }
 
-    /* ── Tables ── */
-    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .modern-table th, .modern-table td { padding: 10px 8px; font-size: 0.82rem; }
+    /* Die zwei kleinen Zahlen-Kacheln oben dürfen 2-spaltig bleiben */
+    .dashboard-grid.grid-stats-2col {
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+    /* ── Cards ── */
+    .card {
+        padding: 14px 14px;
+        margin-bottom: 0;
+        border-radius: 14px;
+    }
+    .summary-card { padding: 14px; }
+    .big-number { font-size: 2rem; margin-top: 6px; }
+    h3 { font-size: 0.9rem; margin-bottom: 12px; }
+    .section-header { flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .section-header h2 { font-size: 1rem; }
+
+    /* ── Listen ── */
+    .list-item { padding: 10px 12px; }
+    .activity-list, .debtors-list, .item-list { gap: 8px; }
+
+    /* ── Tabellen ── */
+    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
+    .modern-table th, .modern-table td { padding: 9px 8px; font-size: 0.8rem; }
 
     /* ── Buttons ── */
-    .btn { padding: 10px 14px; font-size: 0.9rem; }
-    .btn-small { padding: 7px 10px; font-size: 0.8rem; }
+    .btn { padding: 10px 16px; font-size: 0.9rem; touch-action: manipulation; }
+    .btn-small { padding: 7px 11px; font-size: 0.8rem; }
 
-    /* ── UT Cards grid ── */
+    /* ── UT Karten Grid ── */
     .ut-cards-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 14px;
+        grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+        gap: 12px;
+        justify-items: center;
     }
-    .ut-card { width: 100%; }
+    .ut-card { width: 100%; max-width: 200px; }
 
     /* ── Duell ── */
-    #duel-container { gap: 12px; }
-    .duel-vote-btn { width: 150px; font-size: 0.82rem; }
-    .duel-result-bar { width: 150px; }
-    .duel-vs { font-size: 1.4rem; }
+    #duel-container {
+        gap: 10px;
+        padding: 4px 0;
+    }
+    .duel-card-wrap { gap: 10px; }
+    .duel-vote-btn { width: 140px; font-size: 0.8rem; padding: 9px 8px; }
+    .duel-result-bar { width: 140px; }
+    .duel-vs { font-size: 1.3rem; align-self: center; }
 
-    /* ── Modals ── */
-    .modal { align-items: flex-end; }
+    /* ── Modals → Sheet von unten ── */
+    .modal { align-items: flex-end; padding: 0; }
     .modal-content {
         max-width: 100% !important;
-        width: 100%;
-        border-radius: 20px 20px 0 0 !important;
-        padding: 24px 20px 32px;
-        max-height: 90vh;
+        width: 100% !important;
+        border-radius: 22px 22px 0 0 !important;
+        padding: 20px 18px max(28px, env(safe-area-inset-bottom));
+        max-height: 92vh;
         overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
+    .modal-content h2 { font-size: 1.2rem; margin-bottom: 16px; }
+    .modal-actions { gap: 8px; }
+    .modal-actions .btn { flex: 1; }
 
-    /* ── Forms ── */
-    input, select { padding: 12px; font-size: 16px; } /* 16px prevents iOS zoom */
+    /* ── Formulare ── */
+    input, select {
+        padding: 13px 12px;
+        font-size: 16px; /* verhindert iOS-Zoom */
+        border-radius: 10px;
+    }
+    .modern-form { gap: 12px; }
+    .form-group label { font-size: 0.85rem; }
 
-    /* ── Auth box ── */
-    #auth-box { padding: 28px 20px; width: 95%; }
+    /* ── UT Karten-Bearbeitungs-Modal ── */
+    .ut-attr-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .ut-attr-row input[type=range] { height: 22px; }
 
-    /* ── Misc ── */
+    /* ── Auth Box ── */
+    #auth-box { padding: 28px 20px; width: 94%; border-radius: 16px; }
+    #auth-box h2 { font-size: 1.2rem; }
+
+    /* ── Diverses ── */
     #sync-indicator { display: none; }
-    #auth-logout-btn { bottom: 80px; }
-    .section-header { flex-wrap: wrap; gap: 8px; }
-    .section-header h2 { font-size: 1.05rem; }
+    #auth-logout-btn { bottom: 88px; left: 12px; font-size: 0.7rem; }
 }
 
-/* Extra small phones */
-@media (max-width: 380px) {
-    .dashboard-grid { grid-template-columns: 1fr; }
-    .nav-links li { min-width: 44px; }
-    .ut-cards-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+/* ── Extra kleine Phones (< 390px) ── */
+@media (max-width: 390px) {
+    .ut-cards-grid { grid-template-columns: repeat(2, 1fr); }
+    .nav-links li { min-width: 42px; }
+    .kassenstand strong { font-size: 1.2rem; }
+    .duel-vote-btn { width: 120px; font-size: 0.75rem; }
+    .duel-result-bar { width: 120px; }
 }
 
 /* ═══ ULTIMATE TEAM KARTEN ═══ */
@@ -773,13 +850,13 @@ body.role-getraenke .ausgaben-only { display: none !important; }
 
                 <!-- Dashboard -->
                 <section id="dashboard" class="section active">
-                    <div class="dashboard-grid">
+                    <div class="dashboard-grid grid-stats-2col">
                         <div class="card glass-panel summary-card" style="text-align:center;">
                             <h3>💰 Kassenbestand</h3>
                             <strong id="dash-total-fund" class="big-number">0,00 €</strong>
                         </div>
                         <div class="card glass-panel summary-card" style="text-align:center;">
-                            <h3>⏳ Offene Monatsbeiträge</h3>
+                            <h3>⏳ Offene Beiträge</h3>
                             <strong id="dash-open-fees" class="big-number">0,00 €</strong>
                         </div>
                     </div>
@@ -2878,16 +2955,24 @@ function updateUI() {
         if (drinkRanking.length === 0) {
             topDrinksList.innerHTML = '<li class="list-item" style="color:var(--text-muted)">Noch keine Getränke verbucht.</li>';
         } else {
+            // Podium order: #2 left, #1 center, #3 right — each with different scale
+            const podiumOrder = drinkRanking.length === 1 ? [0]
+                : drinkRanking.length === 2 ? [1, 0]
+                : [1, 0, 2]; // index into drinkRanking
+            const scales = { 0: 0.90, 1: 0.75, 2: 0.65 }; // rank index → scale
+            const ranks = ['#1','#2','#3'];
             const medals = ['🥇','🥈','🥉'];
-            const scales = [0.85, 0.72, 0.72];
-            topDrinksList.style.cssText = 'display:flex; flex-direction:row; gap:16px; align-items:flex-end; justify-content:center; flex-wrap:wrap; padding:12px 0 4px;';
-            topDrinksList.innerHTML = drinkRanking.map((d, i) => {
+
+            topDrinksList.style.cssText = 'display:flex; flex-direction:row; gap:10px; align-items:flex-end; justify-content:center; flex-wrap:wrap; padding:12px 0 4px;';
+            topDrinksList.innerHTML = podiumOrder.map(rankIdx => {
+                const d = drinkRanking[rankIdx];
                 const card = utGetCardData(d.player.id);
                 const cardHTML = utBuildCardHTML(d.player, card, false, false);
-                const s = scales[i];
-                return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                const s = scales[rankIdx];
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                    <span style="font-size:0.75rem;font-weight:800;color:var(--text-muted);letter-spacing:0.5px;">${ranks[rankIdx]}</span>
                     <div style="transform:scale(${s});transform-origin:bottom center;margin-top:${(s-1)*310}px;">${cardHTML}</div>
-                    <span style="font-size:1rem;font-weight:800;color:var(--text-main);">${medals[i]} ${d.qty}x 🍺</span>
+                    <span style="font-size:0.9rem;font-weight:800;color:var(--text-main);">${medals[rankIdx]} ${d.qty}x 🍺</span>
                 </div>`;
             }).join('');
         }
@@ -3704,9 +3789,8 @@ function renderDashboardMvp() {
         const card = utGetCardData(winnerPlayer.id);
         const cardHTML = utBuildCardHTML(winnerPlayer, card, false, false);
         const label = isOpen ? `⚡ Führt aktuell · ${winner.count}/${totalVotes} Stimmen · noch ${utMvpCountdown(deadline)}` : `🏆 MVP · ${winner.count}/${totalVotes} Stimmen`;
-        const color = isOpen ? '#fbbf24' : '#fbbf24';
-        latestHTML += `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-            <div style="transform:scale(0.55);transform-origin:left center;width:${0.55*200}px;height:${0.55*310}px;overflow:visible;flex-shrink:0;">${cardHTML}</div>
+        latestHTML += `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;min-height:180px;">
+            <div style="transform:scale(0.55);transform-origin:left top;width:${Math.round(0.55*200)}px;height:${Math.round(0.55*310)}px;overflow:visible;flex-shrink:0;margin-bottom:0;">${cardHTML}</div>
             <div>
                 <p style="font-size:1.05rem;font-weight:800;color:#fbbf24;">${winnerPlayer.name}</p>
                 <p style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;">${label}</p>
