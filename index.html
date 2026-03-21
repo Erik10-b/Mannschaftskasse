@@ -1850,16 +1850,25 @@ async function _restoreSession() {
         const obj = JSON.parse(saved);
         if (!obj.email || obj.expires < Date.now()) { localStorage.removeItem('mkasse_session'); return false; }
 
-        // Rolle immer frisch aus DB (damit Admin-Änderungen sofort greifen)
-        const row = await _fetchUserRow(obj.email);
-        if (!row) return false;
+        // Rolle frisch aus DB holen — bei Netzwerkfehler gecachte Rolle verwenden
+        let role = obj.role || 'readonly';
+        let playerId = obj.player_id || null;
+        try {
+            const row = await _fetchUserRow(obj.email);
+            if (row) {
+                role = row.role;
+                playerId = row.player_id || null;
+                obj.role = role;
+                obj.player_id = playerId;
+                localStorage.setItem('mkasse_session', JSON.stringify(obj));
+            }
+            // row === null: Nutzer nicht mehr in DB → trotzdem readonly zeigen
+        } catch(netErr) {
+            console.warn('Kein Netzwerk – verwende gecachte Rolle:', role);
+            // Weitermachen mit gecachten Werten
+        }
 
-        // Session aktualisieren
-        obj.role = row.role;
-        obj.player_id = row.player_id || null;
-        localStorage.setItem('mkasse_session', JSON.stringify(obj));
-
-        _applyRoleAndShow(row.role, row.player_id || null);
+        _applyRoleAndShow(role, playerId);
         return true;
     } catch(e) {
         console.error('Session restore error:', e);
@@ -2300,21 +2309,32 @@ async function loadState() {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
             headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
         });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const rows = await res.json();
-        if (rows && rows.length > 0 && rows[0].data && rows[0].data.players) {
-            state = rows[0].data;
-            if (!state.guests) state.guests = [];
+        if (rows && rows.length > 0 && rows[0] && rows[0].data && rows[0].data.players) {
+            const loaded = rows[0].data;
+            // Fehlende Felder aus MASTER_STATE ergänzen (sichert gegen leere/neue Felder ab)
+            state = Object.assign({}, JSON.parse(JSON.stringify(MASTER_STATE)), loaded);
+            // Kritische Arrays/Objekte sichern
+            if (!state.players || !Array.isArray(state.players)) state.players = MASTER_STATE.players;
+            if (!state.transactions || !Array.isArray(state.transactions)) state.transactions = [];
+            if (!state.guests || !Array.isArray(state.guests)) state.guests = [];
+            if (!state.fineTypes || !Array.isArray(state.fineTypes)) state.fineTypes = MASTER_STATE.fineTypes;
+            if (!state.feeTypes || !Array.isArray(state.feeTypes)) state.feeTypes = MASTER_STATE.feeTypes;
+            if (!state.drinkTypes || !Array.isArray(state.drinkTypes)) state.drinkTypes = MASTER_STATE.drinkTypes;
+            if (!state.monthlyFees || typeof state.monthlyFees !== 'object') state.monthlyFees = MASTER_STATE.monthlyFees;
             setSyncStatus('saved', '✓ Aktuell');
         } else {
-            // DB empty — seed with master state
+            // DB leer — mit Master-State initialisieren
             state = JSON.parse(JSON.stringify(MASTER_STATE));
             if (window.APP_IS_ADMIN) await _syncToSupabase();
             setSyncStatus('saved', '✓ Initialisiert');
         }
     } catch(e) {
         console.error('Load failed:', e);
+        // Fallback: lokaler Master-State, App bleibt nutzbar
         state = JSON.parse(JSON.stringify(MASTER_STATE));
-        setSyncStatus('error', '⚠ Offline');
+        setSyncStatus('error', '⚠ Offline – lokale Daten');
     }
     updateUI();
 }
@@ -3156,6 +3176,19 @@ window.togglePlayerPaid = function (playerId, isChecked) {
 
 // ─── UI Rendering ─────────────────────────────────────────────────────────────
 function updateUI() {
+    // Sicherheitsnetz: falls state-Felder fehlen, mit Defaults auffüllen
+    if (!state) return;
+    if (!Array.isArray(state.players)) state.players = [];
+    if (!Array.isArray(state.transactions)) state.transactions = [];
+    if (!Array.isArray(state.fineTypes)) state.fineTypes = [];
+    if (!Array.isArray(state.feeTypes)) state.feeTypes = [];
+    if (!Array.isArray(state.drinkTypes)) state.drinkTypes = [];
+    if (!Array.isArray(state.guests)) state.guests = [];
+    if (typeof state.monthlyFees !== 'object' || !state.monthlyFees) state.monthlyFees = {};
+    if (!state.games) state.games = [];
+    if (!state.mvpVotes) state.mvpVotes = {};
+    if (!state.duels) state.duels = {};
+    if (!state.playerProfiles) state.playerProfiles = {};
     const populateSelect = (elementId, items, valueKey, labelFn) => {
         const el = document.getElementById(elementId);
         el.innerHTML = '<option value="" disabled selected>Bitte wählen...</option>';
@@ -4439,3 +4472,921 @@ function renderDuel() {
 // SPIELDETAILS — Tore, Assists, Karten
 // ══════════════════════════════════════════════════════════════
 
+function _renderGameStatsInline(game) {
+    const goals = game.goals || [];
+    const cards = game.cards || [];
+    if (goals.length === 0 && cards.length === 0) return '';
+
+    const cardIcon = { yellow: '🟨', yellowred: '🟨🔴', red: '🔴' };
+    const playerName = id => {
+        const p = state.players.find(p => p.id === id);
+        return p ? p.name.split(' ').pop() : '?';
+    };
+
+    let html = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--glass-border); display:flex; flex-wrap:wrap; gap:6px 16px;">';
+
+    goals.forEach(g => {
+        html += `<span style="font-size:0.82rem;">⚽ <strong>${playerName(g.scorerId)}</strong>`;
+        if (g.assistId) html += ` <span style="color:var(--text-muted);">(🎯 ${playerName(g.assistId)})</span>`;
+        if (g.minute) html += ` <span style="color:var(--text-muted);">${g.minute}'</span>`;
+        html += '</span>';
+    });
+
+    cards.forEach(c => {
+        html += `<span style="font-size:0.82rem;">${cardIcon[c.type] || '🟨'} <strong>${playerName(c.playerId)}</strong>`;
+        if (c.minute) html += ` <span style="color:var(--text-muted);">${c.minute}'</span>`;
+        html += '</span>';
+    });
+
+    html += '</div>';
+    return html;
+}
+
+window.openGameStats = function(gameId) {
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    document.getElementById('game-stats-id').value = gameId;
+    document.getElementById('game-stats-title').textContent = `⚽ vs. ${game.opponent} — Details`;
+    _renderGoalRows(game.goals || []);
+    _renderCardRows(game.cards || []);
+    openModal('modal-game-stats');
+};
+
+function _playerOptions(selectedId = '') {
+    return '<option value="">– Spieler –</option>' +
+        [...state.players].sort((a,b) => a.name.localeCompare(b.name))
+            .map(p => `<option value="${p.id}" ${p.id === selectedId ? 'selected' : ''}>${p.name}</option>`)
+            .join('');
+}
+
+function _renderGoalRows(goals) {
+    const container = document.getElementById('goals-list');
+    if (!container) return;
+    if (goals.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Tore eingetragen.</p>';
+        return;
+    }
+    container.innerHTML = goals.map((g, i) => `
+        <div class="game-stat-row" data-index="${i}" style="display:grid; grid-template-columns:1fr 1fr 60px 36px; gap:6px; align-items:center;">
+            <select class="goal-scorer" onchange="window._goalChanged(${i},'scorerId',this.value)">${_playerOptions(g.scorerId)}</select>
+            <select class="goal-assist" onchange="window._goalChanged(${i},'assistId',this.value)">
+                <option value="">– kein Assist –</option>
+                ${[...state.players].sort((a,b) => a.name.localeCompare(b.name))
+                    .map(p => `<option value="${p.id}" ${p.id === g.assistId ? 'selected' : ''}>${p.name}</option>`).join('')}
+            </select>
+            <input type="number" min="1" max="120" placeholder="Min" value="${g.minute || ''}"
+                onchange="window._goalChanged(${i},'minute',this.value)"
+                style="padding:8px 6px; font-size:0.85rem;">
+            <button class="btn btn-danger btn-small" onclick="window._removeGoal(${i})" style="padding:6px 8px;">✕</button>
+        </div>`).join('');
+}
+
+window._tempGoals = [];
+window._tempCards = [];
+
+window.addGoalRow = function() {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    if (!game.goals) game.goals = [];
+    game.goals.push({ scorerId: '', assistId: '', minute: '' });
+    _renderGoalRows(game.goals);
+};
+
+window._goalChanged = function(idx, field, val) {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game || !game.goals[idx]) return;
+    game.goals[idx][field] = val;
+};
+
+window._removeGoal = function(idx) {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    game.goals.splice(idx, 1);
+    _renderGoalRows(game.goals);
+};
+
+function _renderCardRows(cards) {
+    const container = document.getElementById('cards-list');
+    if (!container) return;
+    if (cards.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Karten eingetragen.</p>';
+        return;
+    }
+    container.innerHTML = cards.map((c, i) => `
+        <div style="display:grid; grid-template-columns:1fr 120px 60px 36px; gap:6px; align-items:center;">
+            <select onchange="window._cardChanged(${i},'playerId',this.value)">${_playerOptions(c.playerId)}</select>
+            <select onchange="window._cardChanged(${i},'type',this.value)">
+                <option value="yellow"  ${c.type==='yellow'    ?'selected':''}>🟨 Gelb</option>
+                <option value="yellowred" ${c.type==='yellowred'?'selected':''}>🟨🔴 Gelb-Rot</option>
+                <option value="red"     ${c.type==='red'       ?'selected':''}>🔴 Rot</option>
+            </select>
+            <input type="number" min="1" max="120" placeholder="Min" value="${c.minute || ''}"
+                onchange="window._cardChanged(${i},'minute',this.value)"
+                style="padding:8px 6px; font-size:0.85rem;">
+            <button class="btn btn-danger btn-small" onclick="window._removeCard(${i})" style="padding:6px 8px;">✕</button>
+        </div>`).join('');
+}
+
+window.addCardRow = function() {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    if (!game.cards) game.cards = [];
+    game.cards.push({ playerId: '', type: 'yellow', minute: '' });
+    _renderCardRows(game.cards);
+};
+
+window._cardChanged = function(idx, field, val) {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game || !game.cards[idx]) return;
+    game.cards[idx][field] = val;
+};
+
+window._removeCard = function(idx) {
+    const gameId = document.getElementById('game-stats-id').value;
+    const game = state.games.find(g => g.id === gameId);
+    if (!game) return;
+    game.cards.splice(idx, 1);
+    _renderCardRows(game.cards);
+};
+
+window.saveGameStats = function() {
+    hideAllModals();
+    saveState();
+    renderGames();
+};
+
+// ══════════════════════════════════════════════════════════════
+// RANKING — Top 3 pro Attribut aus Duell-Votes
+// ══════════════════════════════════════════════════════════════
+
+function renderRanking() {
+    const container = document.getElementById('ranking-content');
+    if (!container) return;
+
+    // ── Tore & Assists aus Spieldetails ──────────────────────────
+    const goalStats = {}; // { playerId: { goals, assists } }
+    state.players.forEach(p => { goalStats[p.id] = { goals: 0, assists: 0 }; });
+    (state.games || []).forEach(game => {
+        (game.goals || []).forEach(g => {
+            if (g.scorerId && goalStats[g.scorerId]) goalStats[g.scorerId].goals++;
+            if (g.assistId && goalStats[g.assistId]) goalStats[g.assistId].assists++;
+        });
+    });
+
+    const topScorers = state.players
+        .map(p => ({ player: p, ...goalStats[p.id] }))
+        .filter(x => x.goals > 0 || x.assists > 0)
+        .sort((a, b) => (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists));
+
+    const topAssists = [...state.players]
+        .map(p => ({ player: p, ...goalStats[p.id] }))
+        .filter(x => x.assists > 0)
+        .sort((a, b) => b.assists - a.assists);
+
+    const medals = ['🥇','🥈','🥉'];
+    const medalColors = ['#fbbf24','#94a3b8','#cd7c3a'];
+
+    function statPodium(players) {
+        const podiumOrder = players.length === 1 ? [0]
+            : players.length === 2 ? [1, 0]
+            : [1, 0, 2];
+        return podiumOrder.map(i => {
+            const { player, goals, assists } = players[i];
+            const card = utGetCardData(player.id);
+            const cardHTML = utBuildCardHTML(player, card, false, false);
+            const s = i === 0 ? 0.72 : 0.58;
+            return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+                <span style="font-size:0.75rem;font-weight:800;color:${medalColors[i]};">${medals[i]}</span>
+                <div style="transform:scale(${s});transform-origin:bottom center;margin-top:${(s-1)*310}px;">${cardHTML}</div>
+                <div style="text-align:center;font-size:0.8rem;font-weight:700;color:var(--text-main);">
+                    ${goals !== undefined ? `⚽ ${goals}` : ''} ${assists !== undefined ? `🎯 ${assists}` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    let statsHTML = '';
+
+    if (topScorers.length > 0) {
+        statsHTML += `<div style="margin-bottom:32px;">
+            <h3 style="margin-bottom:16px;font-size:1rem;">⚽ Torschützen</h3>
+            <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">
+                ${statPodium(topScorers.slice(0,3))}
+            </div>
+        </div>
+        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
+    }
+
+    if (topAssists.length > 0) {
+        statsHTML += `<div style="margin-bottom:32px;">
+            <h3 style="margin-bottom:16px;font-size:1rem;">🎯 Vorlagen</h3>
+            <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">
+                ${statPodium(topAssists.slice(0,3).map(x => ({ ...x, goals: undefined })))}
+            </div>
+        </div>
+        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
+    }
+
+    if (topScorers.length === 0 && topAssists.length === 0) {
+        statsHTML = `<p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:24px;">Noch keine Tore oder Assists eingetragen. Füge Spieldetails über den 📊 Details-Button im Spiele-Tab hinzu.</p>
+        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
+    }
+    // ── Duell Rankings ──────────────────────────────────────────
+    let duelHTML = '';
+    if (!state.duels || Object.keys(state.duels).length === 0) {
+        duelHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Duell-Abstimmungen vorhanden.</p>';
+    } else {
+        const wins = {};
+        state.players.forEach(p => { wins[p.id] = {}; DUEL_ATTRS.forEach(a => { wins[p.id][a.key] = 0; }); });
+        Object.entries(state.duels).forEach(([key, votes]) => {
+            const parts = key.split('__');
+            if (parts.length !== 2) return;
+            const [playerPair, attrKey] = parts;
+            const [idA, idB] = playerPair.split('_');
+            if (!votes || typeof votes.a !== 'number') return;
+            const totalA = votes.a, totalB = votes.b;
+            const total = totalA + totalB;
+            if (total === 0) return;
+            if (wins[idA]) wins[idA][attrKey] = (wins[idA][attrKey] || 0) + totalA / total;
+            if (wins[idB]) wins[idB][attrKey] = (wins[idB][attrKey] || 0) + totalB / total;
+        });
+
+        duelHTML = DUEL_ATTRS.map((attr, attrIdx) => {
+            const ranked = state.players
+                .map(p => ({ player: p, score: wins[p.id]?.[attr.key] || 0 }))
+                .filter(x => x.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 3);
+
+            if (ranked.length === 0) {
+                return `<div style="margin-bottom:28px;">
+                    <h3 style="margin-bottom:12px;font-size:1rem;">${attr.icon} ${attr.label}</h3>
+                    <p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Votes.</p>
+                </div>`;
+            }
+
+            const podiumOrder = ranked.length === 1 ? [0]
+                : ranked.length === 2 ? [1, 0]
+                : [1, 0, 2];
+
+            const podium = podiumOrder.map(i => {
+                const { player, score } = ranked[i];
+                const card = utGetCardData(player.id);
+                const cardHTML = utBuildCardHTML(player, card, false, false);
+                const s = i === 0 ? 0.72 : 0.58;
+                return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                    <span style="font-size:0.75rem;font-weight:800;color:${medalColors[i]};">${medals[i]}</span>
+                    <div style="transform:scale(${s});transform-origin:bottom center;margin-top:${(s-1)*310}px;">${cardHTML}</div>
+                    <span style="font-size:0.8rem;font-weight:700;color:var(--text-main);">${score.toFixed(1)} Pkt</span>
+                </div>`;
+            }).join('');
+
+            return `${attrIdx > 0 ? '<div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>' : ''}
+                <div style="margin-bottom:32px;">
+                    <h3 style="margin-bottom:16px;font-size:1rem;">${attr.icon} ${attr.label}</h3>
+                    <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">${podium}</div>
+                </div>`;
+        }).join('');
+    }
+
+    container.innerHTML = statsHTML +
+        `<h3 style="margin-bottom:20px;font-size:1rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:0.8rem;">⚔️ Community-Duell Ranking</h3>` +
+        duelHTML;
+}
+
+function _updateFootButtons(foot) {
+    ['left','right','both'].forEach(f => {
+        const btn = document.getElementById(`mk-foot-${f}`);
+        if (btn) btn.classList.toggle('btn-selected', foot === f);
+    });
+}
+
+window.setFoot = function(foot) {
+    window._currentFoot = foot;
+    _updateFootButtons(foot);
+    window.saveProfile();
+};
+
+window.saveProfile = async function() {
+    const playerId = window.MY_PLAYER_ID;
+    if (!playerId) return;
+    if (!state.playerProfiles) state.playerProfiles = {};
+    state.playerProfiles[playerId] = {
+        number: document.getElementById('mk-number')?.value || '',
+        nationality: document.getElementById('mk-nationality')?.value || '',
+        foot: window._currentFoot || null,
+    };
+    // Save directly to Supabase state (works for all roles)
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+        });
+        const rows = await res.json();
+        if (!rows || !rows[0]) return;
+        const data = rows[0].data;
+        if (!data.playerProfiles) data.playerProfiles = {};
+        data.playerProfiles[playerId] = state.playerProfiles[playerId];
+        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
+            method: 'PATCH',
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+                'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
+        });
+        setSyncStatus('saved', '✓ Gespeichert');
+    } catch(e) { console.error('Profile save error:', e); }
+};
+
+
+// ═══════════════════════════════════════════════════════════════
+//  BEERPONG LIGA MODULE
+// ═══════════════════════════════════════════════════════════════
+(function () {
+
+    // ── persistent state ─────────────────────────────────────────
+    let bp = null;
+    try { const r = localStorage.getItem('bp_liga'); if (r) bp = JSON.parse(r); } catch(e){}
+    let bpSel = [];
+    let bpPoolSel = null;
+
+    function save() { localStorage.setItem('bp_liga', JSON.stringify(bp)); }
+    function clear(){ localStorage.removeItem('bp_liga'); bp = null; }
+    function shuffle(a){ a=[...a]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+
+    // ── Spieler-Auswahl (Step 1) ──────────────────────────────────
+    function buildSquadGrid() {
+        const grid = document.getElementById('bp-squad-grid');
+        if (!grid) return;
+        const squad = (typeof state !== 'undefined' && state.players)
+            ? [...state.players].sort((a,b) => a.name.localeCompare(b.name)) : [];
+
+        grid.innerHTML = squad.map(p => {
+            const on = bpSel.some(x => x.name === p.name && !x.isGuest);
+            return `<button onclick="window.bpToggle('${p.name.replace(/'/g,"\\'")}',false)"
+              style="padding:10px 12px;border-radius:10px;border:${on?'2px solid var(--primary)':'1px solid var(--glass-border)'};
+              background:${on?'rgba(59,130,246,0.2)':'rgba(0,0,0,0.2)'};
+              color:${on?'#93c5fd':'var(--text-main)'};font-family:var(--font-family);font-size:0.88rem;
+              font-weight:${on?700:400};cursor:pointer;touch-action:manipulation;transition:all 0.15s;">
+              ${on?'✓ ':''}${p.name}</button>`;
+        }).join('');
+
+        bpSel.filter(x => x.isGuest).forEach(g => {
+            const b = document.createElement('button');
+            b.style.cssText = 'padding:10px 12px;border-radius:10px;border:2px solid rgba(16,185,129,0.5);background:rgba(16,185,129,0.15);color:#6ee7b7;font-family:var(--font-family);font-size:0.88rem;font-weight:700;cursor:pointer;touch-action:manipulation;';
+            b.innerHTML = `✓ ${g.name} <span style="font-size:0.7rem;opacity:0.7;">(Gast)</span>`;
+            b.onclick = () => window.bpToggle(g.name, true);
+            grid.appendChild(b);
+        });
+        updateCount();
+    }
+
+    window.bpToggle = function(name, isGuest) {
+        const i = bpSel.findIndex(x => x.name === name && x.isGuest === isGuest);
+        if (i >= 0) bpSel.splice(i, 1); else bpSel.push({name, isGuest});
+        buildSquadGrid();
+    };
+
+    window.bpAddGuest = function() {
+        const inp = document.getElementById('bp-guest-input');
+        const name = inp.value.trim();
+        if (!name || bpSel.some(x => x.name === name)) { inp.focus(); return; }
+        bpSel.push({name, isGuest: true});
+        inp.value = '';
+        buildSquadGrid();
+    };
+
+    function updateCount() {
+        const n = bpSel.length, teams = Math.ceil(n / 2);
+        const el = document.getElementById('bp-selected-count');
+        const btn = document.getElementById('bp-step1-next');
+        let mode = '';
+        if (n >= 4) {
+            if (teams === 4) mode = ' → Hin- & Rückspiel + Halbfinale';
+            else mode = ' → Jeder gegen jeden + Halbfinale';
+        }
+        if (el) el.textContent = n === 0 ? 'Niemand ausgewählt' : `${n} Spieler → ${teams} Teams${mode}`;
+        if (btn) btn.disabled = n < 4;
+    }
+
+    window.bpStep1Next = function() {
+        if (bpSel.length < 4) { alert('Mindestens 4 Spieler (= 2 Teams) werden benötigt.'); return; }
+        document.getElementById('bp-step-1').style.display = 'none';
+        document.getElementById('bp-step-2').style.display = '';
+        const teams = Math.ceil(bpSel.length / 2);
+        const hint = document.getElementById('bp-step2-hint');
+        if (hint) hint.textContent = teams === 4
+            ? `${teams} Teams — Hin- & Rückspiel (jeder 2× gegen jeden), dann Halbfinale.`
+            : `${teams} Teams — Jeder einmal gegen jeden, Top 4 ins Halbfinale.`;
+        buildTeamSlots(teams);
+    };
+
+    // ── Step 2: Teams ────────────────────────────────────────────
+    function buildTeamSlots(count) {
+        const c = document.getElementById('bp-teams-input');
+        const us = document.getElementById('bp-unassigned-section');
+        c.innerHTML = '';
+        if (us) us.style.display = 'none';
+        for (let i = 0; i < count; i++) {
+            c.innerHTML += `<div class="glass-panel" style="padding:14px;border-radius:12px;">
+                <div style="font-weight:700;margin-bottom:10px;color:var(--text-muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:1px;">TEAM ${i+1}</div>
+                <div class="form-group" style="margin-bottom:8px;">
+                    <label style="font-size:0.82rem;">Teamname</label>
+                    <input type="text" class="bp-team-name" placeholder="Team ${i+1}" value="Team ${i+1}" style="margin-top:4px;">
+                </div>
+                <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:4px;">Spieler</div>
+                <div class="bp-team-slots" data-team="${i}" style="min-height:36px;padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px dashed rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;gap:6px;">
+                    <span class="bp-slot-empty" style="opacity:0.4;font-size:0.82rem;">Leer</span>
+                </div>
+            </div>`;
+        }
+    }
+
+    window.bpRandomTeams = function() {
+        buildTeamSlots(Math.ceil(bpSel.length / 2));
+        document.getElementById('bp-unassigned-section').style.display = 'none';
+        const sh = shuffle([...bpSel]);
+        sh.forEach((p, idx) => {
+            const ti = Math.floor(idx / 2);
+            const slot = document.querySelectorAll('.bp-team-slots')[ti];
+            if (!slot) return;
+            slot.querySelector('.bp-slot-empty')?.remove();
+            const tag = document.createElement('span');
+            tag.style.cssText = 'padding:3px 10px;background:rgba(59,130,246,0.18);border:1px solid rgba(59,130,246,0.3);border-radius:6px;color:#93c5fd;font-weight:600;font-size:0.82rem;';
+            tag.textContent = p.name + (p.isGuest ? ' 👤' : '');
+            tag.dataset.playerName = p.name;
+            slot.appendChild(tag);
+        });
+    };
+
+    window.bpManualTeams = function() {
+        buildTeamSlots(Math.ceil(bpSel.length / 2));
+        const us = document.getElementById('bp-unassigned-section');
+        us.style.display = '';
+        const pool = document.getElementById('bp-unassigned-pool');
+        pool.innerHTML = '';
+        bpSel.forEach(p => {
+            const b = document.createElement('button');
+            b.style.cssText = 'padding:5px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:var(--text-main);font-family:var(--font-family);font-size:0.83rem;cursor:pointer;touch-action:manipulation;';
+            b.textContent = p.name + (p.isGuest ? ' 👤' : '');
+            b.dataset.playerName = p.name;
+            b.onclick = () => bpPickFromPool(p.name, b);
+            pool.appendChild(b);
+        });
+        document.querySelectorAll('.bp-team-slots').forEach(slot => {
+            slot.style.cursor = 'pointer';
+            slot.style.borderColor = 'rgba(59,130,246,0.3)';
+            slot.onclick = () => bpDropToSlot(slot);
+        });
+    };
+
+    function bpPickFromPool(name, el) {
+        document.querySelectorAll('#bp-unassigned-pool button').forEach(b => b.style.background = 'rgba(255,255,255,0.08)');
+        if (bpPoolSel === name) { bpPoolSel = null; return; }
+        bpPoolSel = name; el.style.background = 'rgba(59,130,246,0.3)';
+    }
+
+    function bpDropToSlot(slot) {
+        if (!bpPoolSel) return;
+        const name = bpPoolSel;
+        const p = bpSel.find(x => x.name === name);
+        if (!p) return;
+        if (slot.querySelectorAll('[data-player-name]').length >= 2) { alert('Max. 2 Spieler pro Team.'); return; }
+        document.querySelector(`#bp-unassigned-pool button[data-player-name="${CSS.escape(name)}"]`)?.remove();
+        slot.querySelector('.bp-slot-empty')?.remove();
+        const tag = document.createElement('span');
+        tag.style.cssText = 'padding:3px 10px;background:rgba(59,130,246,0.18);border:1px solid rgba(59,130,246,0.3);border-radius:6px;color:#93c5fd;font-weight:600;font-size:0.82rem;cursor:pointer;';
+        tag.textContent = name + (p.isGuest ? ' 👤' : '');
+        tag.dataset.playerName = name;
+        tag.title = 'Klick zum Entfernen';
+        tag.onclick = e => {
+            e.stopPropagation(); tag.remove();
+            if (!slot.querySelectorAll('[data-player-name]').length) {
+                const em = document.createElement('span'); em.className = 'bp-slot-empty'; em.style.opacity = '0.4'; em.style.fontSize = '0.82rem'; em.textContent = 'Leer'; slot.appendChild(em);
+            }
+            const pool = document.getElementById('bp-unassigned-pool');
+            const nb = document.createElement('button');
+            nb.style.cssText = 'padding:5px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:var(--text-main);font-family:var(--font-family);font-size:0.83rem;cursor:pointer;touch-action:manipulation;';
+            nb.textContent = name + (p.isGuest ? ' 👤' : '');
+            nb.dataset.playerName = name;
+            nb.onclick = () => bpPickFromPool(name, nb);
+            pool.appendChild(nb);
+        };
+        slot.appendChild(tag);
+        bpPoolSel = null;
+    }
+
+    window.bpStep2Back = function() {
+        document.getElementById('bp-step-1').style.display = '';
+        document.getElementById('bp-step-2').style.display = 'none';
+        buildSquadGrid();
+    };
+
+    window.bpStep2Next = function() {
+        const names = [...document.querySelectorAll('.bp-team-name')].map(i => i.value.trim());
+        const slots = [...document.querySelectorAll('.bp-team-slots')];
+        const teams = names.map((name, i) => ({
+            id: 't' + i, name: name || `Team ${i+1}`,
+            players: slots[i] ? [...slots[i].querySelectorAll('[data-player-name]')].map(t => t.dataset.playerName) : [],
+            w: 0, l: 0, bf: 0, ba: 0
+        }));
+        if (teams.some(t => t.players.length === 0)) { alert('Jedes Team braucht mindestens einen Spieler.'); return; }
+
+        const n = teams.length;
+        const isSmall = (n === 4);
+        const matches = buildSchedule(teams, isSmall);
+        bp = {teams, matches, playoffs: null, cupKing: {}, phase: 'group', isSmall};
+        save();
+        renderLeague();
+    };
+
+    // ── Spielplan ─────────────────────────────────────────────────
+    // 4 Teams → Hin- & Rückspiel; sonst jeder gegen jeden (einmal)
+    // ── Spielplan: echter Rundenspielbetrieb ──────────────────────
+    // Berger-Algorithmus (circle method): fixer Anker oben links,
+    // alle anderen Teams rotieren im Uhrzeigersinn pro Runde.
+    // Bei ungerader Teamzahl wird ein "Freilos"-Platzhalter ergänzt.
+    function buildSchedule(teams, double) {
+        const n = teams.length;
+        const ids = teams.map(t => t.id);
+        const odd = n % 2 !== 0;
+        if (odd) ids.push('BYE'); // Freilos
+
+        const slots = ids.length; // gerade
+        const rounds = slots - 1;
+        const half = slots / 2;
+        const anchor = ids[0];
+        let ring = ids.slice(1); // rotierendes Feld
+
+        const roundMatches = []; // Array von Runden, jede Runde = Array von Paarungen
+
+        for (let r = 0; r < rounds; r++) {
+            const circle = [anchor, ...ring];
+            const pairs = [];
+            for (let i = 0; i < half; i++) {
+                const a = circle[i], b = circle[slots - 1 - i];
+                if (a !== 'BYE' && b !== 'BYE') pairs.push({a, b});
+            }
+            roundMatches.push(pairs);
+            // Rotate ring one step clockwise
+            ring = [ring[ring.length - 1], ...ring.slice(0, ring.length - 1)];
+        }
+
+        // Flach machen mit Runden-Info
+        let mid = 0;
+        const all = [];
+        roundMatches.forEach((pairs, ri) => {
+            pairs.forEach(p => {
+                all.push({id: 'm' + mid++, a: p.a, b: p.b, ca: null, cb: null, played: false, round: ri + 1, isReturn: false});
+            });
+        });
+
+        // Für 4 Teams: Rückrunde anhängen (Heim/Auswärts tauschen)
+        if (double) {
+            const hinrunde = [...all];
+            hinrunde.forEach(p => {
+                all.push({id: 'm' + mid++, a: p.b, b: p.a, ca: null, cb: null, played: false, round: p.round + rounds, isReturn: true});
+            });
+        }
+
+        return all;
+    }
+
+    // ── Tabelle sortieren ─────────────────────────────────────────
+    function sortedTable() {
+        return [...bp.teams].sort((a, b) => {
+            const pd = (b.w * 3) - (a.w * 3); if (pd !== 0) return pd;
+            const ra = a.ba > 0 ? a.bf / a.ba : a.bf, rb = b.ba > 0 ? b.bf / b.ba : b.bf;
+            return rb - ra;
+        });
+    }
+
+    // ── Haupt-Render ──────────────────────────────────────────────
+    function renderLeague() {
+        if (!bp) return;
+        document.getElementById('bp-setup').style.display = 'none';
+        document.getElementById('bp-league-section').style.display = '';
+
+        const n = bp.teams.length;
+        const phaseTitle = document.getElementById('bp-phase-title');
+        const phaseDesc = document.getElementById('bp-phase-desc');
+        const qualHint = document.getElementById('bp-qualify-hint');
+
+        if (bp.phase === 'group') {
+            if (phaseTitle) phaseTitle.textContent = n === 4 ? '🏓 Hin- & Rückrunde' : '🏓 Gruppenphase';
+            if (phaseDesc) phaseDesc.textContent = n === 4
+                ? 'Jedes Team spielt zweimal gegen jedes andere. Danach: Halbfinale 1. vs 4. und 2. vs 3.'
+                : 'Jedes Team spielt einmal gegen jedes andere. Top 4 kommen ins Halbfinale.';
+            if (qualHint) qualHint.textContent = 'Top 4 → Halbfinale';
+            document.getElementById('bp-schedule-card').style.display = '';
+            document.getElementById('bp-playoffs-card').style.display = 'none';
+        } else {
+            if (phaseTitle) phaseTitle.textContent = '🏆 Playoffs';
+            if (phaseDesc) phaseDesc.textContent = 'Halbfinale und Finale.';
+            if (qualHint) qualHint.textContent = '';
+            document.getElementById('bp-schedule-card').style.display = 'none';
+            document.getElementById('bp-playoffs-card').style.display = '';
+        }
+
+        renderTable();
+        if (bp.phase === 'group') renderSchedule();
+        else renderPlayoffs();
+        renderCupKing();
+        checkPlayoffUnlock();
+    }
+
+    function tName(id) { return bp.teams.find(t => t.id === id)?.name || '?'; }
+    function tPlayers(id) { return bp.teams.find(t => t.id === id)?.players || []; }
+
+    function renderTable() {
+        const tbody = document.getElementById('bp-table-body');
+        const sorted = sortedTable();
+        tbody.innerHTML = sorted.map((t, i) => {
+            const pts = t.w * 3, g = t.w + t.l;
+            const ratio = t.ba > 0 ? (t.bf / t.ba).toFixed(2) : (t.bf > 0 ? '∞' : '—');
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+            const qualBg = bp.phase === 'group' && i < 4 ? 'background:rgba(59,130,246,0.06);' : '';
+            const sep = bp.phase === 'group' && i === 4 ? 'border-top:2px solid rgba(59,130,246,0.25);' : '';
+            return `<tr style="${qualBg}${sep}">
+                <td style="font-weight:700;">${medal}</td>
+                <td style="font-weight:600;">${t.name}</td>
+                <td style="font-size:0.8rem;color:var(--text-muted);">${t.players.slice(0,2).join(' & ') || '—'}</td>
+                <td style="text-align:center;">${g}</td>
+                <td style="text-align:center;color:var(--success);font-weight:600;">${t.w}</td>
+                <td style="text-align:center;color:var(--danger);font-weight:600;">${t.l}</td>
+                <td style="text-align:center;">${t.bf}</td>
+                <td style="text-align:center;">${t.ba}</td>
+                <td style="text-align:center;font-weight:600;">${ratio}</td>
+                <td style="text-align:center;font-weight:800;font-size:1rem;color:${pts > 0 ? 'var(--primary)' : 'var(--text-main)'};">${pts}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderSchedule() {
+        const list = document.getElementById('bp-schedule-list');
+        const prog = document.getElementById('bp-schedule-progress');
+        const done = bp.matches.filter(m => m.played).length;
+        if (prog) prog.textContent = `${done} / ${bp.matches.length} gespielt`;
+
+        // Gruppieren nach Runde
+        const rounds = {};
+        bp.matches.forEach(m => {
+            const r = m.round || 1;
+            if (!rounds[r]) rounds[r] = [];
+            rounds[r].push(m);
+        });
+
+        const totalRounds = Math.max(...Object.keys(rounds).map(Number));
+        const isDoubleRound = bp.isSmall; // 4 Teams: Hin- & Rückrunde
+        const halfRounds = isDoubleRound ? totalRounds / 2 : totalRounds;
+
+        list.innerHTML = Object.keys(rounds).sort((a,b)=>a-b).map(ri => {
+            const rn = parseInt(ri);
+            const ms = rounds[rn];
+            const allDone = ms.every(m => m.played);
+            const someDone = ms.some(m => m.played);
+            const isReturn = isDoubleRound && rn > halfRounds;
+            const label = isReturn
+                ? `↩ Rückrunde – Spieltag ${rn - halfRounds}`
+                : `Spieltag ${rn}`;
+            const dot = allDone
+                ? `<span style="width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block;flex-shrink:0;"></span>`
+                : someDone
+                ? `<span style="width:8px;height:8px;border-radius:50%;background:#fbbf24;display:inline-block;flex-shrink:0;"></span>`
+                : `<span style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.2);display:inline-block;flex-shrink:0;"></span>`;
+
+            const matchRows = ms.map(m => {
+                const aWon = m.played && m.ca > m.cb, bWon = m.played && m.cb > m.ca;
+                return `<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;background:${m.played?'rgba(0,0,0,0.2)':'rgba(0,0,0,0.1)'};border-radius:8px;border:1px solid ${m.played?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.09)'};flex-wrap:wrap;">
+                    <span style="flex:1;min-width:80px;font-weight:${aWon?700:400};color:${aWon?'var(--success)':'var(--text-main)'};font-size:0.88rem;">${aWon?'✅ ':''}${tName(m.a)}</span>
+                    <span style="font-weight:700;font-size:0.88rem;color:var(--text-muted);min-width:44px;text-align:center;">${m.played?`${m.ca} : ${m.cb}`:'vs'}</span>
+                    <span style="flex:1;min-width:80px;font-weight:${bWon?700:400};color:${bWon?'var(--success)':'var(--text-main)'};font-size:0.88rem;text-align:right;">${tName(m.b)}${bWon?' ✅':''}</span>
+                    <button onclick="window.bpOpenMatch('${m.id}')" style="padding:3px 10px;border-radius:6px;font-size:0.75rem;font-family:var(--font-family);font-weight:600;cursor:pointer;white-space:nowrap;background:${m.played?'rgba(255,255,255,0.05)':'rgba(59,130,246,0.2)'};border:1px solid ${m.played?'rgba(255,255,255,0.1)':'rgba(59,130,246,0.4)'};color:${m.played?'var(--text-muted)':'#93c5fd'};">${m.played?'✏️':'➕'}</button>
+                </div>`;
+            }).join('');
+
+            return `<div style="border:1px solid ${allDone?'rgba(16,185,129,0.2)':'rgba(255,255,255,0.08)'};border-radius:12px;overflow:hidden;margin-bottom:2px;">
+                <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${allDone?'rgba(16,185,129,0.07)':'rgba(255,255,255,0.04)'};cursor:pointer;user-select:none;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+                    ${dot}
+                    <span style="font-weight:700;font-size:0.88rem;flex:1;">${label}</span>
+                    <span style="font-size:0.78rem;color:var(--text-muted);">${ms.filter(m=>m.played).length}/${ms.length} gespielt</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;">▾</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px;padding:8px 10px;">
+                    ${matchRows}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function checkPlayoffUnlock() {
+        if (bp.phase !== 'group') return;
+        const allDone = bp.matches.every(m => m.played);
+        const existing = document.getElementById('bp-start-playoffs-btn');
+        if (allDone && !existing) {
+            const card = document.getElementById('bp-schedule-card');
+            if (!card) return;
+            const btn = document.createElement('button');
+            btn.id = 'bp-start-playoffs-btn';
+            btn.className = 'btn btn-success';
+            btn.style.cssText = 'margin-top:16px;width:100%;font-size:1rem;';
+            btn.textContent = '🏆 Playoffs starten!';
+            btn.onclick = window.bpStartPlayoffs;
+            card.appendChild(btn);
+        }
+    }
+
+    window.bpStartPlayoffs = function() {
+        if (!confirm('Gruppenphase abschließen und Playoffs starten?')) return;
+        const top4 = sortedTable().slice(0, 4);
+        bp.playoffs = {
+            sf: [
+                {id:'sf1', a:top4[0].id, b:top4[3].id, ca:null, cb:null, played:false, label:`HF: 1. ${top4[0].name} vs 4. ${top4[3].name}`},
+                {id:'sf2', a:top4[1].id, b:top4[2].id, ca:null, cb:null, played:false, label:`HF: 2. ${top4[1].name} vs 3. ${top4[2].name}`}
+            ],
+            final: {id:'final', a:null, b:null, ca:null, cb:null, played:false, label:'🏆 Finale'},
+            winner: null
+        };
+        bp.phase = 'playoffs';
+        save();
+        renderLeague();
+    };
+
+    function renderPlayoffs() {
+        const container = document.getElementById('bp-playoffs-bracket');
+        if (!bp.playoffs) { container.innerHTML = ''; return; }
+        const {sf, final} = bp.playoffs;
+
+        const matchBlock = m => {
+            if (!m.a && !m.b) return `<div style="padding:14px;background:rgba(0,0,0,0.2);border-radius:10px;border:1px dashed rgba(255,255,255,0.1);color:var(--text-muted);font-size:0.85rem;">${m.label}: Warte auf Halbfinale…</div>`;
+            const aWon = m.played && m.ca > m.cb, bWon = m.played && m.cb > m.ca;
+            return `<div style="padding:12px 16px;background:rgba(0,0,0,0.25);border-radius:12px;border:1px solid rgba(255,255,255,0.08);">
+                <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">${m.label}</div>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span style="flex:1;font-weight:${aWon?700:400};color:${aWon?'var(--success)':'var(--text-main)'};">${aWon?'✅ ':''}${tName(m.a)}</span>
+                    <span style="font-weight:700;color:var(--text-muted);min-width:44px;text-align:center;">${m.played?`${m.ca}:${m.cb}`:'vs'}</span>
+                    <span style="flex:1;font-weight:${bWon?700:400};color:${bWon?'var(--success)':'var(--text-main)'};">${tName(m.b)}${bWon?' ✅':''}</span>
+                    <button onclick="window.bpOpenMatch('${m.id}')" style="padding:4px 12px;border-radius:6px;font-size:0.78rem;font-family:var(--font-family);font-weight:600;cursor:pointer;background:${m.played?'rgba(255,255,255,0.06)':'rgba(59,130,246,0.2)'};border:1px solid ${m.played?'rgba(255,255,255,0.12)':'rgba(59,130,246,0.4)'};color:${m.played?'var(--text-muted)':'#93c5fd'};">${m.played?'✏️ Ändern':'➕ Ergebnis'}</button>
+                </div>
+            </div>`;
+        };
+
+        let winnerHTML = '';
+        if (bp.playoffs.winner) {
+            const w = bp.teams.find(t => t.id === bp.playoffs.winner);
+            winnerHTML = `<div style="text-align:center;padding:28px 20px;background:linear-gradient(135deg,rgba(212,168,67,0.15),rgba(212,168,67,0.04));border:1px solid rgba(212,168,67,0.35);border-radius:14px;">
+                <div style="font-size:2.5rem;margin-bottom:10px;">🏆</div>
+                <div style="font-size:1.4rem;font-weight:800;color:#fbbf24;">${w?.name}</div>
+                <div style="font-size:0.88rem;color:var(--text-muted);margin-top:6px;">${tPlayers(w?.id).join(' & ')}</div>
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">Beerpong Liga Champion 🍺</div>
+            </div>`;
+        }
+
+        container.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px;">
+            ${matchBlock(sf[0])}
+            ${matchBlock(sf[1])}
+            <div style="height:1px;background:var(--glass-border);margin:2px 0;"></div>
+            ${matchBlock(final)}
+            ${winnerHTML}
+        </div>`;
+    }
+
+    // ── Ergebnis-Modal ────────────────────────────────────────────
+    window.bpOpenMatch = function(id) {
+        let match = null;
+        if (bp.phase === 'group') { match = bp.matches.find(m => m.id === id); }
+        else if (bp.playoffs) {
+            match = bp.playoffs.sf.find(m => m.id === id);
+            if (!match && bp.playoffs.final.id === id) match = bp.playoffs.final;
+        }
+        if (!match) return;
+
+        document.getElementById('modal-bp-result')?.remove();
+        const allPlayers = [...tPlayers(match.a), ...tPlayers(match.b)];
+
+        const modal = document.createElement('div');
+        modal.id = 'modal-bp-result';
+        modal.className = 'modal glass-panel';
+        modal.innerHTML = `<div class="modal-content glass-panel card" style="max-width:440px;">
+            <h2 style="margin-bottom:20px;">🏓 Ergebnis eintragen</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+                <div class="form-group">
+                    <label style="font-weight:600;font-size:0.95rem;">${tName(match.a)}</label>
+                    <span style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:8px;">${tPlayers(match.a).join(' & ')}</span>
+                    <label style="font-size:0.82rem;color:var(--text-muted);">Becher getroffen</label>
+                    <input type="number" id="bp-ca" min="0" max="30" value="${match.ca ?? ''}" placeholder="0" style="margin-top:4px;">
+                </div>
+                <div class="form-group">
+                    <label style="font-weight:600;font-size:0.95rem;">${tName(match.b)}</label>
+                    <span style="font-size:0.78rem;color:var(--text-muted);display:block;margin-bottom:8px;">${tPlayers(match.b).join(' & ')}</span>
+                    <label style="font-size:0.82rem;color:var(--text-muted);">Becher getroffen</label>
+                    <input type="number" id="bp-cb" min="0" max="30" value="${match.cb ?? ''}" placeholder="0" style="margin-top:4px;">
+                </div>
+            </div>
+            ${allPlayers.length ? `
+            <div style="height:1px;background:var(--glass-border);margin-bottom:14px;"></div>
+            <h3 style="margin-bottom:10px;font-size:0.88rem;color:var(--text-muted);">🎯 Individuelle Treffer (Becher-König)</h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
+                ${allPlayers.map(p => `<div class="form-group">
+                    <label style="font-size:0.82rem;">${p}</label>
+                    <input type="number" class="bp-indiv" data-p="${p.replace(/"/g,'&quot;')}" min="0" max="30" value="${bp.cupKing[p] ?? 0}" placeholder="0" style="margin-top:4px;">
+                </div>`).join('')}
+            </div>` : ''}
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-bp-result').remove()">Abbrechen</button>
+                <button class="btn btn-primary" onclick="window.bpSaveMatch('${id}')">✓ Speichern</button>
+            </div>
+        </div>`;
+        document.body.appendChild(modal); lockBodyScroll();
+    };
+
+    window.bpSaveMatch = function(id) {
+        let match = null, isPlayoff = false;
+        if (bp.phase === 'group') { match = bp.matches.find(m => m.id === id); }
+        else if (bp.playoffs) {
+            match = bp.playoffs.sf.find(m => m.id === id);
+            if (!match && bp.playoffs.final.id === id) match = bp.playoffs.final;
+            isPlayoff = true;
+        }
+        if (!match) return;
+
+        const ca = parseInt(document.getElementById('bp-ca').value);
+        const cb = parseInt(document.getElementById('bp-cb').value);
+        if (isNaN(ca) || isNaN(cb)) { alert('Bitte beide Becher-Anzahlen eingeben.'); return; }
+        if (ca === cb) { alert('Unentschieden nicht möglich!'); return; }
+
+        // Undo old stats
+        if (!isPlayoff && match.played) {
+            const ta = bp.teams.find(t => t.id === match.a), tb = bp.teams.find(t => t.id === match.b);
+            if (ta) { ta.bf -= match.ca; ta.ba -= match.cb; if (match.ca > match.cb) ta.w--; else ta.l--; }
+            if (tb) { tb.bf -= match.cb; tb.ba -= match.ca; if (match.cb > match.ca) tb.w--; else tb.l--; }
+        }
+
+        match.ca = ca; match.cb = cb; match.played = true;
+
+        if (!isPlayoff) {
+            const ta = bp.teams.find(t => t.id === match.a), tb = bp.teams.find(t => t.id === match.b);
+            if (ta) { ta.bf += ca; ta.ba += cb; if (ca > cb) ta.w++; else ta.l++; }
+            if (tb) { tb.bf += cb; tb.ba += ca; if (cb > ca) tb.w++; else tb.l++; }
+        }
+
+        // Playoffs: Sieger weiterleiten
+        if (isPlayoff && bp.playoffs) {
+            const winner = ca > cb ? match.a : match.b;
+            if (match.id === 'sf1') bp.playoffs.final.a = winner;
+            if (match.id === 'sf2') bp.playoffs.final.b = winner;
+            if (match.id === 'final') bp.playoffs.winner = winner;
+        }
+
+        document.querySelectorAll('.bp-indiv').forEach(inp => {
+            bp.cupKing[inp.dataset.p] = parseInt(inp.value) || 0;
+        });
+
+        save();
+        document.getElementById('modal-bp-result').remove();
+        renderLeague();
+    };
+
+    // ── Becher-König ──────────────────────────────────────────────
+    function renderCupKing() {
+        const c = document.getElementById('bp-cup-king-list');
+        const entries = Object.entries(bp.cupKing).filter(([,v]) => v > 0).sort((a,b) => b[1] - a[1]);
+        if (!entries.length) { c.innerHTML = '<p style="color:var(--text-muted);font-size:0.88rem;">Noch keine Einträge – beim Eintragen von Ergebnissen individuelle Treffer eintragen.</p>'; return; }
+        const medals = ['🥇','🥈','🥉'];
+        c.innerHTML = entries.map(([name, cups], i) => `<div style="display:flex;align-items:center;padding:10px 16px;background:${i===0?'rgba(212,168,67,0.12)':'rgba(0,0,0,0.2)'};border:1px solid ${i===0?'rgba(212,168,67,0.3)':'rgba(255,255,255,0.06)'};border-radius:10px;gap:12px;">
+            <span style="font-size:1.1rem;">${medals[i] || `${i+1}.`}</span>
+            <span style="flex:1;font-weight:600;">${name}</span>
+            <span style="font-weight:700;color:#fbbf24;">${cups} 🏆</span>
+        </div>`).join('');
+    }
+
+    // ── Reset ─────────────────────────────────────────────────────
+    window.bpReset = function() {
+        if (!confirm('Liga wirklich zurücksetzen? Alle Daten gehen verloren.')) return;
+        clear(); bpSel = []; bpPoolSel = null;
+        document.getElementById('bp-setup').style.display = '';
+        document.getElementById('bp-league-section').style.display = 'none';
+        document.getElementById('bp-step-1').style.display = '';
+        document.getElementById('bp-step-2').style.display = 'none';
+        buildSquadGrid();
+    };
+
+    // ── Tab hook ──────────────────────────────────────────────────
+    window._bpTabOpened = function() {
+        if (bp) renderLeague(); else buildSquadGrid();
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const gi = document.getElementById('bp-guest-input');
+        if (gi) gi.addEventListener('keydown', e => { if (e.key === 'Enter') window.bpAddGuest(); });
+    });
+
+})();
+
+    </script>
+</body>
+
+</html>
