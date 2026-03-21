@@ -99,6 +99,16 @@ select option { background: var(--bg-color); color: var(--text-main); }
 .btn-success:hover { background: var(--success-hover); }
 .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; animation: fadeIn 0.3s ease; }
 .modal.hidden { display: none; }
+/* ── Modal: Hintergrund-Scroll sperren ── */
+body.modal-open {
+    overflow: hidden !important;
+    position: fixed;
+    width: 100%;
+}
+.modal-content {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
 .modal-content { width: 100%; max-width: 400px; padding: 30px; }
 .modal-content h2 { margin-bottom: 20px; font-size: 1.5rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
@@ -843,6 +853,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                 <li data-target="ausgaben"><span class="icon">📉</span><span class="text">Ausgaben</span></li>
                 <li data-target="meinkonto" id="nav-meinkonto" style="display:none;"><span class="icon">👤</span><span class="text">Mein Konto</span></li>
                 <li data-target="ranking"><span class="icon">🏅</span><span class="text">Ranking</span></li>
+                <li data-target="beerpong"><span class="icon">🏓</span><span class="text">Beerpong</span></li>
                 <li data-target="nutzer" id="nav-nutzer" style="display:none;"><span class="icon">⚙️</span><span class="text">Nutzer</span></li>
                 <li id="nav-logout" onclick="window.authLogout()" style="display:none; margin-top:auto; border-top:1px solid var(--glass-border); padding-top:12px; color:#fca5a5;">
                     <span class="icon">🚪</span><span class="text">Abmelden</span>
@@ -1290,6 +1301,120 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                         </div>
                         <div id="ranking-content"></div>
                     </div>
+                </section>
+
+                <!-- Beerpong Turnier -->
+                <section id="beerpong" class="section hidden">
+
+                    <!-- Setup Phase -->
+                    <div id="bp-setup" class="card glass-panel">
+                        <div class="section-header">
+                            <h2>🏓 Beerpong Liga</h2>
+                        </div>
+                        <div id="bp-wizard">
+                            <!-- Step 1: Spieler auswählen -->
+                            <div id="bp-step-1">
+                                <h3 style="margin-bottom:6px;">Schritt 1: Wer spielt mit?</h3>
+                                <p style="color:var(--text-muted); font-size:0.88rem; margin-bottom:18px;">Spieler aus dem Kader wählen oder Gäste hinzufügen. Gerade Anzahl = 2er-Teams, ungerade = ein 1er-Team.</p>
+                                <div id="bp-squad-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px,1fr)); gap:8px; margin-bottom:16px;"></div>
+                                <div style="display:flex; gap:8px; align-items:center; margin-bottom:20px; flex-wrap:wrap;">
+                                    <input type="text" id="bp-guest-input" placeholder="Gastname..." style="flex:1; min-width:150px; max-width:220px;">
+                                    <button class="btn btn-outline btn-small" onclick="window.bpAddGuest()">+ Gast</button>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                                    <span id="bp-selected-count" style="color:var(--text-muted); font-size:0.88rem;">0 Spieler ausgewählt</span>
+                                    <button class="btn btn-primary" onclick="window.bpStep1Next()" id="bp-step1-next" disabled>Weiter →</button>
+                                </div>
+                            </div>
+
+                            <!-- Step 2: Teams einteilen -->
+                            <div id="bp-step-2" style="display:none;">
+                                <h3 style="margin-bottom:6px;">Schritt 2: Teams einteilen</h3>
+                                <p style="color:var(--text-muted); font-size:0.88rem; margin-bottom:16px;" id="bp-step2-hint"></p>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+                                    <button class="btn btn-outline" onclick="window.bpRandomTeams()">🎲 Zufällig auslosen</button>
+                                    <button class="btn btn-secondary" onclick="window.bpManualTeams()">✋ Manuell einteilen</button>
+                                </div>
+                                <div id="bp-unassigned-section" style="display:none; margin-bottom:16px;">
+                                    <div style="font-size:0.8rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Noch nicht eingeteilt</div>
+                                    <div id="bp-unassigned-pool" style="display:flex; flex-wrap:wrap; gap:6px; min-height:36px; padding:8px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px dashed rgba(255,255,255,0.15);"></div>
+                                </div>
+                                <div id="bp-teams-input" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:12px; margin-bottom:20px;"></div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                    <button class="btn btn-secondary" onclick="window.bpStep2Back()">← Zurück</button>
+                                    <button class="btn btn-primary" onclick="window.bpStep2Next()">Liga starten →</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Liga läuft -->
+                    <div id="bp-league-section" style="display:none;">
+
+                        <!-- Header mit Reset -->
+                        <div class="card glass-panel" style="margin-bottom:0;">
+                            <div class="section-header">
+                                <h2 id="bp-phase-title">🏓 Gruppenphase</h2>
+                                <button class="btn btn-danger btn-small" onclick="window.bpReset()">🗑️ Zurücksetzen</button>
+                            </div>
+                            <p id="bp-phase-desc" style="color:var(--text-muted); font-size:0.88rem;"></p>
+                        </div>
+
+                        <!-- Tabelle -->
+                        <div class="card glass-panel" style="margin-top:0;">
+                            <div class="section-header">
+                                <h2>📊 Tabelle</h2>
+                                <span id="bp-qualify-hint" style="font-size:0.82rem; color:var(--text-muted);"></span>
+                            </div>
+                            <div class="table-container">
+                                <table class="modern-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Team</th>
+                                            <th>Spieler</th>
+                                            <th style="text-align:center">Sp</th>
+                                            <th style="text-align:center">S</th>
+                                            <th style="text-align:center">N</th>
+                                            <th style="text-align:center">B+</th>
+                                            <th style="text-align:center">B-</th>
+                                            <th style="text-align:center">Verh.</th>
+                                            <th style="text-align:center">Pkt</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bp-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Spielplan (Gruppenphase) -->
+                        <div class="card glass-panel" style="margin-top:0;" id="bp-schedule-card">
+                            <div class="section-header">
+                                <h2>📅 Spielplan</h2>
+                                <span id="bp-schedule-progress" style="font-size:0.82rem; color:var(--text-muted);"></span>
+                            </div>
+                            <div id="bp-schedule-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+                        </div>
+
+                        <!-- Playoffs -->
+                        <div class="card glass-panel" style="margin-top:0; display:none;" id="bp-playoffs-card">
+                            <div class="section-header">
+                                <h2>🏆 Playoffs</h2>
+                            </div>
+                            <div id="bp-playoffs-bracket"></div>
+                        </div>
+
+                        <!-- Becher-König -->
+                        <div class="card glass-panel" style="margin-top:0;">
+                            <div class="section-header">
+                                <h2>🎯 Becher-König</h2>
+                                <span style="color:var(--text-muted); font-size:0.85rem;">Individuelle Treffer</span>
+                            </div>
+                            <div id="bp-cup-king-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+                        </div>
+
+                    </div>
+
                 </section>
 
             </div>
@@ -2322,6 +2447,7 @@ window._mobileNavTo = function(target) {
     if (target === 'spiele') renderGames();
     if (target === 'spieler') { if (!_duel) window.newDuel(); }
     if (target === 'ranking') renderRanking();
+    if (target === 'beerpong') { try { window._bpTabOpened && window._bpTabOpened(); } catch(e){} }
     _updateMobileNavActive();
     window.closeMobileNav();
 };
@@ -2366,22 +2492,46 @@ document.querySelectorAll('.nav-links li').forEach(link => {
         if (targetId === 'spiele') renderGames();
         if (targetId === 'spieler') { if (!_duel) window.newDuel(); }
         if (targetId === 'ranking') renderRanking();
+        if (targetId === 'beerpong') { try { window._bpTabOpened && window._bpTabOpened(); } catch(e){} }
     });
 });
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
+let _scrollY = 0; // iOS: Scrollposition merken bevor body fixed wird
+
+function lockBodyScroll() {
+    _scrollY = window.scrollY;
+    document.body.style.top = `-${_scrollY}px`;
+    document.body.classList.add('modal-open');
+}
+
+function unlockBodyScroll() {
+    document.body.classList.remove('modal-open');
+    document.body.style.top = '';
+    window.scrollTo(0, _scrollY);
+}
+
+function openModal(id) {
+    hideAllModals();
+    const el = document.getElementById(id);
+    if (el) { el.classList.remove('hidden'); lockBodyScroll(); }
+}
+
 function hideAllModals() {
     document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+    // Dynamisch erzeugte Modals (bp-result etc.) entfernen
+    document.getElementById('modal-bp-result')?.remove();
+    unlockBodyScroll();
 }
 window.closeModals = hideAllModals;
 
 document.getElementById('btn-add-player').addEventListener('click', () => {
-    document.getElementById('modal-player').classList.remove('hidden');
+    openModal('modal-player');
     document.getElementById('new-player-name').focus();
 });
 
 document.getElementById('btn-add-fine-type').addEventListener('click', () => {
-    document.getElementById('modal-fine-type').classList.remove('hidden');
+    openModal('modal-fine-type');
 });
 
 // ─── Form Submissions ─────────────────────────────────────────────────────────
@@ -2476,7 +2626,7 @@ window.openFinePaymentModal = function(playerId, playerName, openAmount) {
     document.getElementById('payment-player-id').value = playerId;
     document.getElementById('payment-player-name').innerText = `Einzahlung für ${playerName} (Offen: ${formatCurrency(openAmount)})`;
     document.getElementById('payment-amount').value = openAmount > 0 ? openAmount.toFixed(2) : '';
-    document.getElementById('modal-payment').classList.remove('hidden');
+    openModal('modal-payment');
 };
 
 document.getElementById('form-expense-entry').addEventListener('submit', (e) => {
@@ -2631,14 +2781,14 @@ window.openPaymentModal = function (playerId, playerName, currentDebt) {
     document.getElementById('payment-player-id').value = playerId;
     document.getElementById('payment-player-name').innerText = `Einzahlung für ${playerName} (Aktuelle Schulden: ${formatCurrency(currentDebt)})`;
     document.getElementById('payment-amount').value = currentDebt > 0 ? currentDebt.toFixed(2) : 0;
-    document.getElementById('modal-payment').classList.remove('hidden');
+    openModal('modal-payment');
 };
 
 window.openDrinkPaymentModal = function (playerId, playerName, openAmount) {
     document.getElementById('drink-payment-player-id').value = playerId;
     document.getElementById('drink-payment-player-name').innerText = `Einzahlung für ${playerName} (Offen: ${formatCurrency(openAmount)})`;
     document.getElementById('drink-payment-amount').value = openAmount > 0 ? openAmount.toFixed(2) : '';
-    document.getElementById('modal-drink-payment').classList.remove('hidden');
+    openModal('modal-drink-payment');
 };
 
 document.getElementById('form-drink-payment').addEventListener('submit', (e) => {
@@ -2687,7 +2837,7 @@ window.openFineDetails = function (playerId, playerName) {
     if (!modal) return;
     document.getElementById('fine-details-player-name').innerText = `Strafen für ${playerName}`;
     _renderFineDetailsList(playerId);
-    modal.classList.remove('hidden');
+    modal.classList.remove('hidden'); lockBodyScroll();
 };
 
 function _renderFineDetailsList(playerId) {
@@ -2762,7 +2912,7 @@ window.openDrinkDetails = function (playerId, playerName) {
     document.getElementById('drink-details-player-name').innerText = `🍺 ${playerName}`;
     modal._playerId = playerId; // store for re-render after delete
     _renderDrinkDetailsList(playerId);
-    modal.classList.remove('hidden');
+    modal.classList.remove('hidden'); lockBodyScroll();
 };
 
 function _renderDrinkDetailsList(playerId) {
@@ -2888,7 +3038,7 @@ window.openGuestDrinkDetails = function(guestName) {
     modal._guestName = guestName;
     modal._playerId = null;
     _renderGuestDrinkDetailsList(guestName);
-    modal.classList.remove('hidden');
+    modal.classList.remove('hidden'); lockBodyScroll();
 };
 
 function _renderGuestDrinkDetailsList(guestName) {
@@ -2965,7 +3115,7 @@ window.openGuestDrinkPaymentModal = function(guestName, openAmount) {
     document.getElementById('drink-payment-player-id').value = 'GUEST:' + guestName;
     document.getElementById('drink-payment-player-name').innerText = `Einzahlung für 👤 ${guestName} (Gast) · Offen: ${formatCurrency(openAmount)}`;
     document.getElementById('drink-payment-amount').value = openAmount > 0 ? openAmount.toFixed(2) : '';
-    document.getElementById('modal-drink-payment').classList.remove('hidden');
+    openModal('modal-drink-payment');
 };
 
 // ─── Ausgaben (mit Löschen & Bearbeiten) ─────────────────────────────────────
@@ -3666,7 +3816,7 @@ window.openUtCardModal = function(playerId) {
     // Store current image for preview
     window._utCurrentImage = card.image || null;
     window.utUpdatePreview();
-    document.getElementById('modal-ut-card').classList.remove('hidden');
+    openModal('modal-ut-card');
 };
 
 window.utHandleImageUpload = function(input) {
@@ -4289,336 +4439,3 @@ function renderDuel() {
 // SPIELDETAILS — Tore, Assists, Karten
 // ══════════════════════════════════════════════════════════════
 
-function _renderGameStatsInline(game) {
-    const goals = game.goals || [];
-    const cards = game.cards || [];
-    if (goals.length === 0 && cards.length === 0) return '';
-
-    const cardIcon = { yellow: '🟨', yellowred: '🟨🔴', red: '🔴' };
-    const playerName = id => {
-        const p = state.players.find(p => p.id === id);
-        return p ? p.name.split(' ').pop() : '?';
-    };
-
-    let html = '<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--glass-border); display:flex; flex-wrap:wrap; gap:6px 16px;">';
-
-    goals.forEach(g => {
-        html += `<span style="font-size:0.82rem;">⚽ <strong>${playerName(g.scorerId)}</strong>`;
-        if (g.assistId) html += ` <span style="color:var(--text-muted);">(🎯 ${playerName(g.assistId)})</span>`;
-        if (g.minute) html += ` <span style="color:var(--text-muted);">${g.minute}'</span>`;
-        html += '</span>';
-    });
-
-    cards.forEach(c => {
-        html += `<span style="font-size:0.82rem;">${cardIcon[c.type] || '🟨'} <strong>${playerName(c.playerId)}</strong>`;
-        if (c.minute) html += ` <span style="color:var(--text-muted);">${c.minute}'</span>`;
-        html += '</span>';
-    });
-
-    html += '</div>';
-    return html;
-}
-
-window.openGameStats = function(gameId) {
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    document.getElementById('game-stats-id').value = gameId;
-    document.getElementById('game-stats-title').textContent = `⚽ vs. ${game.opponent} — Details`;
-    _renderGoalRows(game.goals || []);
-    _renderCardRows(game.cards || []);
-    document.getElementById('modal-game-stats').classList.remove('hidden');
-};
-
-function _playerOptions(selectedId = '') {
-    return '<option value="">– Spieler –</option>' +
-        [...state.players].sort((a,b) => a.name.localeCompare(b.name))
-            .map(p => `<option value="${p.id}" ${p.id === selectedId ? 'selected' : ''}>${p.name}</option>`)
-            .join('');
-}
-
-function _renderGoalRows(goals) {
-    const container = document.getElementById('goals-list');
-    if (!container) return;
-    if (goals.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Tore eingetragen.</p>';
-        return;
-    }
-    container.innerHTML = goals.map((g, i) => `
-        <div class="game-stat-row" data-index="${i}" style="display:grid; grid-template-columns:1fr 1fr 60px 36px; gap:6px; align-items:center;">
-            <select class="goal-scorer" onchange="window._goalChanged(${i},'scorerId',this.value)">${_playerOptions(g.scorerId)}</select>
-            <select class="goal-assist" onchange="window._goalChanged(${i},'assistId',this.value)">
-                <option value="">– kein Assist –</option>
-                ${[...state.players].sort((a,b) => a.name.localeCompare(b.name))
-                    .map(p => `<option value="${p.id}" ${p.id === g.assistId ? 'selected' : ''}>${p.name}</option>`).join('')}
-            </select>
-            <input type="number" min="1" max="120" placeholder="Min" value="${g.minute || ''}"
-                onchange="window._goalChanged(${i},'minute',this.value)"
-                style="padding:8px 6px; font-size:0.85rem;">
-            <button class="btn btn-danger btn-small" onclick="window._removeGoal(${i})" style="padding:6px 8px;">✕</button>
-        </div>`).join('');
-}
-
-window._tempGoals = [];
-window._tempCards = [];
-
-window.addGoalRow = function() {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    if (!game.goals) game.goals = [];
-    game.goals.push({ scorerId: '', assistId: '', minute: '' });
-    _renderGoalRows(game.goals);
-};
-
-window._goalChanged = function(idx, field, val) {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game || !game.goals[idx]) return;
-    game.goals[idx][field] = val;
-};
-
-window._removeGoal = function(idx) {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    game.goals.splice(idx, 1);
-    _renderGoalRows(game.goals);
-};
-
-function _renderCardRows(cards) {
-    const container = document.getElementById('cards-list');
-    if (!container) return;
-    if (cards.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Karten eingetragen.</p>';
-        return;
-    }
-    container.innerHTML = cards.map((c, i) => `
-        <div style="display:grid; grid-template-columns:1fr 120px 60px 36px; gap:6px; align-items:center;">
-            <select onchange="window._cardChanged(${i},'playerId',this.value)">${_playerOptions(c.playerId)}</select>
-            <select onchange="window._cardChanged(${i},'type',this.value)">
-                <option value="yellow"  ${c.type==='yellow'    ?'selected':''}>🟨 Gelb</option>
-                <option value="yellowred" ${c.type==='yellowred'?'selected':''}>🟨🔴 Gelb-Rot</option>
-                <option value="red"     ${c.type==='red'       ?'selected':''}>🔴 Rot</option>
-            </select>
-            <input type="number" min="1" max="120" placeholder="Min" value="${c.minute || ''}"
-                onchange="window._cardChanged(${i},'minute',this.value)"
-                style="padding:8px 6px; font-size:0.85rem;">
-            <button class="btn btn-danger btn-small" onclick="window._removeCard(${i})" style="padding:6px 8px;">✕</button>
-        </div>`).join('');
-}
-
-window.addCardRow = function() {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    if (!game.cards) game.cards = [];
-    game.cards.push({ playerId: '', type: 'yellow', minute: '' });
-    _renderCardRows(game.cards);
-};
-
-window._cardChanged = function(idx, field, val) {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game || !game.cards[idx]) return;
-    game.cards[idx][field] = val;
-};
-
-window._removeCard = function(idx) {
-    const gameId = document.getElementById('game-stats-id').value;
-    const game = state.games.find(g => g.id === gameId);
-    if (!game) return;
-    game.cards.splice(idx, 1);
-    _renderCardRows(game.cards);
-};
-
-window.saveGameStats = function() {
-    hideAllModals();
-    saveState();
-    renderGames();
-};
-
-// ══════════════════════════════════════════════════════════════
-// RANKING — Top 3 pro Attribut aus Duell-Votes
-// ══════════════════════════════════════════════════════════════
-
-function renderRanking() {
-    const container = document.getElementById('ranking-content');
-    if (!container) return;
-
-    // ── Tore & Assists aus Spieldetails ──────────────────────────
-    const goalStats = {}; // { playerId: { goals, assists } }
-    state.players.forEach(p => { goalStats[p.id] = { goals: 0, assists: 0 }; });
-    (state.games || []).forEach(game => {
-        (game.goals || []).forEach(g => {
-            if (g.scorerId && goalStats[g.scorerId]) goalStats[g.scorerId].goals++;
-            if (g.assistId && goalStats[g.assistId]) goalStats[g.assistId].assists++;
-        });
-    });
-
-    const topScorers = state.players
-        .map(p => ({ player: p, ...goalStats[p.id] }))
-        .filter(x => x.goals > 0 || x.assists > 0)
-        .sort((a, b) => (b.goals * 2 + b.assists) - (a.goals * 2 + a.assists));
-
-    const topAssists = [...state.players]
-        .map(p => ({ player: p, ...goalStats[p.id] }))
-        .filter(x => x.assists > 0)
-        .sort((a, b) => b.assists - a.assists);
-
-    const medals = ['🥇','🥈','🥉'];
-    const medalColors = ['#fbbf24','#94a3b8','#cd7c3a'];
-
-    function statPodium(players) {
-        const podiumOrder = players.length === 1 ? [0]
-            : players.length === 2 ? [1, 0]
-            : [1, 0, 2];
-        return podiumOrder.map(i => {
-            const { player, goals, assists } = players[i];
-            const card = utGetCardData(player.id);
-            const cardHTML = utBuildCardHTML(player, card, false, false);
-            const s = i === 0 ? 0.72 : 0.58;
-            return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-                <span style="font-size:0.75rem;font-weight:800;color:${medalColors[i]};">${medals[i]}</span>
-                <div style="transform:scale(${s});transform-origin:bottom center;margin-top:${(s-1)*310}px;">${cardHTML}</div>
-                <div style="text-align:center;font-size:0.8rem;font-weight:700;color:var(--text-main);">
-                    ${goals !== undefined ? `⚽ ${goals}` : ''} ${assists !== undefined ? `🎯 ${assists}` : ''}
-                </div>
-            </div>`;
-        }).join('');
-    }
-
-    let statsHTML = '';
-
-    if (topScorers.length > 0) {
-        statsHTML += `<div style="margin-bottom:32px;">
-            <h3 style="margin-bottom:16px;font-size:1rem;">⚽ Torschützen</h3>
-            <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">
-                ${statPodium(topScorers.slice(0,3))}
-            </div>
-        </div>
-        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
-    }
-
-    if (topAssists.length > 0) {
-        statsHTML += `<div style="margin-bottom:32px;">
-            <h3 style="margin-bottom:16px;font-size:1rem;">🎯 Vorlagen</h3>
-            <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">
-                ${statPodium(topAssists.slice(0,3).map(x => ({ ...x, goals: undefined })))}
-            </div>
-        </div>
-        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
-    }
-
-    if (topScorers.length === 0 && topAssists.length === 0) {
-        statsHTML = `<p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:24px;">Noch keine Tore oder Assists eingetragen. Füge Spieldetails über den 📊 Details-Button im Spiele-Tab hinzu.</p>
-        <div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>`;
-    }
-    // ── Duell Rankings ──────────────────────────────────────────
-    let duelHTML = '';
-    if (!state.duels || Object.keys(state.duels).length === 0) {
-        duelHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Duell-Abstimmungen vorhanden.</p>';
-    } else {
-        const wins = {};
-        state.players.forEach(p => { wins[p.id] = {}; DUEL_ATTRS.forEach(a => { wins[p.id][a.key] = 0; }); });
-        Object.entries(state.duels).forEach(([key, votes]) => {
-            const parts = key.split('__');
-            if (parts.length !== 2) return;
-            const [playerPair, attrKey] = parts;
-            const [idA, idB] = playerPair.split('_');
-            if (!votes || typeof votes.a !== 'number') return;
-            const totalA = votes.a, totalB = votes.b;
-            const total = totalA + totalB;
-            if (total === 0) return;
-            if (wins[idA]) wins[idA][attrKey] = (wins[idA][attrKey] || 0) + totalA / total;
-            if (wins[idB]) wins[idB][attrKey] = (wins[idB][attrKey] || 0) + totalB / total;
-        });
-
-        duelHTML = DUEL_ATTRS.map((attr, attrIdx) => {
-            const ranked = state.players
-                .map(p => ({ player: p, score: wins[p.id]?.[attr.key] || 0 }))
-                .filter(x => x.score > 0)
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 3);
-
-            if (ranked.length === 0) {
-                return `<div style="margin-bottom:28px;">
-                    <h3 style="margin-bottom:12px;font-size:1rem;">${attr.icon} ${attr.label}</h3>
-                    <p style="color:var(--text-muted);font-size:0.85rem;">Noch keine Votes.</p>
-                </div>`;
-            }
-
-            const podiumOrder = ranked.length === 1 ? [0]
-                : ranked.length === 2 ? [1, 0]
-                : [1, 0, 2];
-
-            const podium = podiumOrder.map(i => {
-                const { player, score } = ranked[i];
-                const card = utGetCardData(player.id);
-                const cardHTML = utBuildCardHTML(player, card, false, false);
-                const s = i === 0 ? 0.72 : 0.58;
-                return `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
-                    <span style="font-size:0.75rem;font-weight:800;color:${medalColors[i]};">${medals[i]}</span>
-                    <div style="transform:scale(${s});transform-origin:bottom center;margin-top:${(s-1)*310}px;">${cardHTML}</div>
-                    <span style="font-size:0.8rem;font-weight:700;color:var(--text-main);">${score.toFixed(1)} Pkt</span>
-                </div>`;
-            }).join('');
-
-            return `${attrIdx > 0 ? '<div style="height:1px;background:var(--glass-border);margin:4px 0 28px;"></div>' : ''}
-                <div style="margin-bottom:32px;">
-                    <h3 style="margin-bottom:16px;font-size:1rem;">${attr.icon} ${attr.label}</h3>
-                    <div style="display:flex;gap:16px;align-items:flex-end;justify-content:center;flex-wrap:wrap;">${podium}</div>
-                </div>`;
-        }).join('');
-    }
-
-    container.innerHTML = statsHTML +
-        `<h3 style="margin-bottom:20px;font-size:1rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-size:0.8rem;">⚔️ Community-Duell Ranking</h3>` +
-        duelHTML;
-}
-
-function _updateFootButtons(foot) {
-    ['left','right','both'].forEach(f => {
-        const btn = document.getElementById(`mk-foot-${f}`);
-        if (btn) btn.classList.toggle('btn-selected', foot === f);
-    });
-}
-
-window.setFoot = function(foot) {
-    window._currentFoot = foot;
-    _updateFootButtons(foot);
-    window.saveProfile();
-};
-
-window.saveProfile = async function() {
-    const playerId = window.MY_PLAYER_ID;
-    if (!playerId) return;
-    if (!state.playerProfiles) state.playerProfiles = {};
-    state.playerProfiles[playerId] = {
-        number: document.getElementById('mk-number')?.value || '',
-        nationality: document.getElementById('mk-nationality')?.value || '',
-        foot: window._currentFoot || null,
-    };
-    // Save directly to Supabase state (works for all roles)
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        const rows = await res.json();
-        if (!rows || !rows[0]) return;
-        const data = rows[0].data;
-        if (!data.playerProfiles) data.playerProfiles = {};
-        data.playerProfiles[playerId] = state.playerProfiles[playerId];
-        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
-            method: 'PATCH',
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
-        });
-        setSyncStatus('saved', '✓ Gespeichert');
-    } catch(e) { console.error('Profile save error:', e); }
-};
-
-    </script>
-</body>
-
-</html>
