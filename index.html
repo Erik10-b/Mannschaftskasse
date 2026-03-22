@@ -134,6 +134,9 @@ body.modal-open {
 #sync-indicator.saved { color: var(--success); }
 #sync-indicator.error { color: var(--danger); }
 body.readonly .edit-only { display: none !important; }
+/* Nur Admin + Getränkewart dürfen Spiele eintragen */
+body.readonly .admin-getraenke-only { display: none !important; }
+body.role-strafen .admin-getraenke-only { display: none !important; }
 body.readonly input[type=checkbox].custom-checkbox { pointer-events: none; opacity: 0.6; }
 /* Strafen role: hide non-strafen edit controls */
 body.role-strafen .getraenke-only { display: none !important; }
@@ -946,7 +949,7 @@ body.role-getraenke .ausgaben-only { display: none !important; }
                 <!-- Spiele & MVP -->
                 <section id="spiele" class="section hidden">
                     <div class="grid-2-col">
-                        <div class="card glass-panel edit-only">
+                        <div class="card glass-panel admin-getraenke-only">
                             <h2 style="margin-bottom:16px;">🏟️ Spiel eintragen</h2>
                             <div class="modern-form">
                                 <div class="form-group">
@@ -2409,6 +2412,7 @@ const NAV_ITEMS = [
     { target: 'strafen',   icon: '⚖️', text: 'Strafen' },
     { target: 'getraenke', icon: '🍺', text: 'Getränke' },
     { target: 'ausgaben',  icon: '📉', text: 'Ausgaben' },
+    { target: 'beerpong',  icon: '🏓', text: 'Beerpong' },
     { target: 'meinkonto', icon: '👤', text: 'Mein Konto', id: 'mnav-meinkonto' },
     { target: 'ranking',   icon: '🏅', text: 'Ranking' },
     { target: 'nutzer',    icon: '⚙️', text: 'Nutzer',    id: 'mnav-nutzer' },
@@ -2559,7 +2563,8 @@ document.getElementById('form-new-player').addEventListener('submit', (e) => {
     e.preventDefault();
     const name = document.getElementById('new-player-name').value.trim();
     if (!name) return;
-    state.players.push({ id: generateId(), name });
+    const feeStartMonth = new Date().getMonth(); // 0=Jan … 11=Dez — ab aktuellem Monat
+    state.players.push({ id: generateId(), name, feeStartMonth });
     document.getElementById('new-player-name').value = '';
     hideAllModals();
     saveState();
@@ -4047,6 +4052,7 @@ window.setOutcome = function(o) {
 };
 
 window.addGame = function() {
+    if (!['admin','getraenke'].includes(window.APP_ROLE)) { alert('Keine Berechtigung – nur Getränkewart und Admin können Spiele eintragen.'); return; }
     gamesInit();
     const opponent = document.getElementById('game-opponent').value.trim();
     const date = document.getElementById('game-date').value;
@@ -4068,6 +4074,7 @@ window.addGame = function() {
 };
 
 window.deleteGame = function(gameId) {
+    if (!['admin','getraenke'].includes(window.APP_ROLE)) { alert('Keine Berechtigung.'); return; }
     if (!confirm('Spiel wirklich löschen?')) return;
     state.games = state.games.filter(g => g.id !== gameId);
     delete state.mvpVotes[gameId];
@@ -4204,7 +4211,7 @@ function renderGames() {
                     </div>
                     <span style="font-size:0.82rem; color:var(--text-muted);">${new Date(game.date).toLocaleDateString('de-DE')}</span>
                 </div>
-                <div style="display:flex;gap:6px;" class="edit-only">
+                <div style="display:flex;gap:6px;" class="admin-getraenke-only">
                     <button class="btn btn-outline btn-small" onclick="window.openGameStats('${game.id}')">📊 Details</button>
                     <button class="btn btn-danger btn-small" onclick="window.deleteGame('${game.id}')">🗑️</button>
                 </div>
@@ -4615,6 +4622,7 @@ window._removeCard = function(idx) {
 };
 
 window.saveGameStats = function() {
+    if (!['admin','getraenke'].includes(window.APP_ROLE)) { hideAllModals(); return; }
     hideAllModals();
     saveState();
     renderGames();
