@@ -1770,22 +1770,6 @@ function setSyncStatus(type, msg) {
 async function _syncToSupabase() {
     setSyncStatus('saving', '💾 Speichern...');
     try {
-        // Vorm Überschreiben kurz die neuesten asynchronen Community-Daten abrufen,
-        // damit Admins mit altem lokalen State keine laufenden Abstimmungen löschen!
-        const getRes = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=mvpVotes:data->mvpVotes,duels:data->duels,playerCards:data->playerCards,playerProfiles:data->playerProfiles`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        if (getRes.ok) {
-            const rows = await getRes.json();
-            if (rows && rows.length > 0) {
-                const dbData = rows[0];
-                if (dbData.mvpVotes) state.mvpVotes = dbData.mvpVotes;
-                if (dbData.duels) state.duels = dbData.duels;
-                if (dbData.playerCards) state.playerCards = dbData.playerCards;
-                if (dbData.playerProfiles) state.playerProfiles = dbData.playerProfiles;
-            }
-        }
-
         const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
             method: 'PATCH',
             headers: {
@@ -1872,22 +1856,14 @@ async function _restoreSession() {
         // Rolle frisch aus DB holen — bei Netzwerkfehler gecachte Rolle verwenden
         let role = obj.role || 'readonly';
         let playerId = obj.player_id || null;
-        
-        // Neu: Sofort UI anwenden, damit Overlay nicht aufblitzt
-        _applyRoleAndShow(role, playerId);
-
         try {
             const row = await _fetchUserRow(obj.email);
             if (row) {
-                if (role !== row.role || playerId !== row.player_id) {
-                    role = row.role;
-                    playerId = row.player_id || null;
-                    obj.role = role;
-                    obj.player_id = playerId;
-                    localStorage.setItem('mkasse_session', JSON.stringify(obj));
-                    // Optional: Rolle erneut anwenden, falls sie sich im Hintergrund geändert hat
-                    _applyRoleAndShow(role, playerId);
-                }
+                role = row.role;
+                playerId = row.player_id || null;
+                obj.role = role;
+                obj.player_id = playerId;
+                localStorage.setItem('mkasse_session', JSON.stringify(obj));
             }
             // row === null: Nutzer nicht mehr in DB → trotzdem readonly zeigen
         } catch(netErr) {
@@ -1895,6 +1871,7 @@ async function _restoreSession() {
             // Weitermachen mit gecachten Werten
         }
 
+        _applyRoleAndShow(role, playerId);
         return true;
     } catch(e) {
         console.error('Session restore error:', e);
@@ -4193,7 +4170,10 @@ window.deleteGame = function(gameId) {
     renderGames();
 };
 
+let _mvpVoting = false; // Verhindert Doppelklicks
+
 window.voteForMvp = async function(gameId, playerId) {
+    if (_mvpVoting) return; // Laufenden Vote nicht unterbrechen
     gamesInit();
     const session = JSON.parse(localStorage.getItem('mkasse_session') || '{}');
     const voterEmail = session.email || null;
@@ -4204,57 +4184,53 @@ window.voteForMvp = async function(gameId, playerId) {
     const now = new Date();
     if (new Date(game.mvpDeadline) < now) { alert('Die Abstimmung für dieses Spiel ist bereits beendet.'); return; }
 
-    // Neu: Sofortiges UI-Feedback (Optimistic Update)
     if (!state.mvpVotes[gameId]) state.mvpVotes[gameId] = { votes: {}, voters: [] };
     const voteData = state.mvpVotes[gameId];
 
     if (voteData.voters.includes(voterEmail)) {
-        // Doppelklick abfangen
+        alert('Du hast für dieses Spiel bereits abgestimmt!');
         return;
     }
-    
+
+    // Sofort sperren + UI zeigen
+    _mvpVoting = true;
+    setSyncStatus('saving', '⏳ Stimme wird gespeichert...');
+
+    // Vote lokal eintragen
     voteData.votes[playerId] = (voteData.votes[playerId] || 0) + 1;
     voteData.voters.push(voterEmail);
-    
+
+    // UI sofort aktualisieren damit der User Feedback sieht
     renderGames();
     renderDashboardMvp();
 
-    // Vote mit Server synchronisieren und Race-Conditions verhindern
-    await _syncMvpVote(gameId, playerId, voterEmail);
+    // In Supabase schreiben
+    const ok = await _syncMvpVote();
+
+    if (!ok) {
+        // Rollback bei Fehler
+        voteData.votes[playerId] = Math.max(0, (voteData.votes[playerId] || 1) - 1);
+        if (!voteData.votes[playerId]) delete voteData.votes[playerId];
+        voteData.voters = voteData.voters.filter(v => v !== voterEmail);
+        renderGames();
+        renderDashboardMvp();
+        alert('Stimme konnte nicht gespeichert werden – bitte nochmal versuchen.');
+    }
+
+    _mvpVoting = false;
 };
 
-async function _syncMvpVote(gameId, playerId, voterEmail) {
-    setSyncStatus('saving', '⏳ Vote...');
+async function _syncMvpVote() {
     try {
-        // 1. Hole neuesten Stand von Supabase (Concurrency/Admin-Overwrite Schutz)
         const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
             headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
         });
         if (!res.ok) throw new Error('Fetch failed');
         const rows = await res.json();
         if (!rows || !rows[0]) throw new Error('No data');
-        
         const dbData = rows[0].data;
-        if (!dbData.mvpVotes) dbData.mvpVotes = {};
-        if (!dbData.mvpVotes[gameId]) dbData.mvpVotes[gameId] = { votes: {}, voters: [] };
-        
-        const dbVoteData = dbData.mvpVotes[gameId];
-        
-        // Wurde per anderem Gerät schon votiert?
-        if (dbVoteData.voters.includes(voterEmail)) {
-            setSyncStatus('saved', '✓');
-            return;
-        }
-        
-        // 2. Füge Vote in die FRISCHEN Server-Daten ein
-        dbVoteData.votes[playerId] = (dbVoteData.votes[playerId] || 0) + 1;
-        dbVoteData.voters.push(voterEmail);
-        
-        // 3. Update lokalen State
-        state.mvpVotes = dbData.mvpVotes;
-        
-        // 4. Update hochladen
-        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
+        dbData.mvpVotes = state.mvpVotes;
+        const patch = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
             method: 'PATCH',
             headers: {
                 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
@@ -4262,15 +4238,13 @@ async function _syncMvpVote(gameId, playerId, voterEmail) {
             },
             body: JSON.stringify({ data: dbData, updated_at: new Date().toISOString() })
         });
-        
-        setSyncStatus('saved', '✓ Vote gespeichert');
-        renderGames();
-        renderDashboardMvp();
-        
+        if (!patch.ok) throw new Error('Patch failed');
+        setSyncStatus('saved', '✓ Stimme gespeichert');
+        return true;
     } catch(e) {
         console.error('MVP vote sync failed:', e);
-        setSyncStatus('error', '⚠ Vote nicht gespeichert');
-        alert('Fehler beim Speichern der Stimme. Bitte lade die Seite neu und probiere es noch einmal.');
+        setSyncStatus('error', '⚠ Fehler beim Speichern');
+        return false;
     }
 }
 
@@ -4358,7 +4332,7 @@ function renderGames() {
             const playerBtns = [...state.players].sort((a,b) => a.name.localeCompare(b.name)).map(p => {
                 const v = votes[p.id] || 0;
                 return `<button class="btn btn-outline btn-small" onclick="window.voteForMvp('${game.id}','${p.id}')"
-                    style="font-size:0.8rem; padding:6px 10px;">⭐ ${p.name}${v > 0 ? ` (${v})` : ''}</button>`;
+                    style="font-size:0.8rem; padding:6px 10px;" ${window._mvpVoting ? 'disabled' : ''}>⭐ ${p.name}${v > 0 ? ` (${v})` : ''}</button>`;
             }).join('');
             mvpSection = `<div style="margin-top:12px;">
                 <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:8px;">🗳️ MVP wählen – noch <strong style="color:#fbbf24;">${utMvpCountdown(deadline)}</strong></p>
@@ -4549,7 +4523,7 @@ window.voteDuel = async function(side) {
     if (!state.duels) state.duels = {};
     state.duels[_duel.key] = { ..._duel.votes };
     renderDuel();
-    await _saveDuelToState(side, 1);
+    _saveDuelToState();
 };
 
 window.undoDuel = async function() {
@@ -4559,8 +4533,7 @@ window.undoDuel = async function() {
         alert('Die Stimme kann nur innerhalb von 5 Minuten zurückgenommen werden.');
         return;
     }
-    const side = _duel.votedSide;
-    _duel.votes[side]--;
+    _duel.votes[_duel.votedSide]--;
     _duel.voted = false;
     _duel.votedSide = null;
     _duel.votedAt = null;
@@ -4568,10 +4541,10 @@ window.undoDuel = async function() {
     if (!state.duels) state.duels = {};
     state.duels[_duel.key] = { ..._duel.votes };
     renderDuel();
-    await _saveDuelToState(side, -1);
+    _saveDuelToState();
 };
 
-async function _saveDuelToState(side, diff) {
+async function _saveDuelToState() {
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
             headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
@@ -4580,16 +4553,7 @@ async function _saveDuelToState(side, diff) {
         if (!rows || !rows[0]) return;
         const data = rows[0].data;
         if (!data.duels) data.duels = {};
-        if (!data.duels[_duel.key]) data.duels[_duel.key] = { a: 0, b: 0 };
-        
-        // Add delta exactly to DB truth
-        data.duels[_duel.key][side] += diff;
-        
-        // Pull down the aggregate truth into UI
-        _duel.votes = { ...data.duels[_duel.key] };
-        state.duels[_duel.key] = { ..._duel.votes };
-        renderDuel();
-
+        data.duels[_duel.key] = { ..._duel.votes };
         await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
             method: 'PATCH',
             headers: {
