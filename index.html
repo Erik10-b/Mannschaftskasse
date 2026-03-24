@@ -1872,14 +1872,22 @@ async function _restoreSession() {
         // Rolle frisch aus DB holen — bei Netzwerkfehler gecachte Rolle verwenden
         let role = obj.role || 'readonly';
         let playerId = obj.player_id || null;
+        
+        // Neu: Sofort UI anwenden, damit Overlay nicht aufblitzt
+        _applyRoleAndShow(role, playerId);
+
         try {
             const row = await _fetchUserRow(obj.email);
             if (row) {
-                role = row.role;
-                playerId = row.player_id || null;
-                obj.role = role;
-                obj.player_id = playerId;
-                localStorage.setItem('mkasse_session', JSON.stringify(obj));
+                if (role !== row.role || playerId !== row.player_id) {
+                    role = row.role;
+                    playerId = row.player_id || null;
+                    obj.role = role;
+                    obj.player_id = playerId;
+                    localStorage.setItem('mkasse_session', JSON.stringify(obj));
+                    // Optional: Rolle erneut anwenden, falls sie sich im Hintergrund geändert hat
+                    _applyRoleAndShow(role, playerId);
+                }
             }
             // row === null: Nutzer nicht mehr in DB → trotzdem readonly zeigen
         } catch(netErr) {
@@ -1887,7 +1895,6 @@ async function _restoreSession() {
             // Weitermachen mit gecachten Werten
         }
 
-        _applyRoleAndShow(role, playerId);
         return true;
     } catch(e) {
         console.error('Session restore error:', e);
@@ -4197,6 +4204,21 @@ window.voteForMvp = async function(gameId, playerId) {
     const now = new Date();
     if (new Date(game.mvpDeadline) < now) { alert('Die Abstimmung für dieses Spiel ist bereits beendet.'); return; }
 
+    // Neu: Sofortiges UI-Feedback (Optimistic Update)
+    if (!state.mvpVotes[gameId]) state.mvpVotes[gameId] = { votes: {}, voters: [] };
+    const voteData = state.mvpVotes[gameId];
+
+    if (voteData.voters.includes(voterEmail)) {
+        // Doppelklick abfangen
+        return;
+    }
+    
+    voteData.votes[playerId] = (voteData.votes[playerId] || 0) + 1;
+    voteData.voters.push(voterEmail);
+    
+    renderGames();
+    renderDashboardMvp();
+
     // Vote mit Server synchronisieren und Race-Conditions verhindern
     await _syncMvpVote(gameId, playerId, voterEmail);
 };
@@ -4216,18 +4238,17 @@ async function _syncMvpVote(gameId, playerId, voterEmail) {
         if (!dbData.mvpVotes) dbData.mvpVotes = {};
         if (!dbData.mvpVotes[gameId]) dbData.mvpVotes[gameId] = { votes: {}, voters: [] };
         
-        const voteData = dbData.mvpVotes[gameId];
+        const dbVoteData = dbData.mvpVotes[gameId];
         
         // Wurde per anderem Gerät schon votiert?
-        if (voteData.voters.includes(voterEmail)) {
-            alert('Du hast für dieses Spiel bereits abgestimmt!');
+        if (dbVoteData.voters.includes(voterEmail)) {
             setSyncStatus('saved', '✓');
             return;
         }
         
         // 2. Füge Vote in die FRISCHEN Server-Daten ein
-        voteData.votes[playerId] = (voteData.votes[playerId] || 0) + 1;
-        voteData.voters.push(voterEmail);
+        dbVoteData.votes[playerId] = (dbVoteData.votes[playerId] || 0) + 1;
+        dbVoteData.voters.push(voterEmail);
         
         // 3. Update lokalen State
         state.mvpVotes = dbData.mvpVotes;
