@@ -2319,7 +2319,7 @@ function _cleanupDuplicatePayments() {
     localStorage.setItem('bp_payment_cleanup_v1', '1');
 }
 
-
+function generateId() {
     return Math.random().toString(36).substr(2, 9);
 }
 
