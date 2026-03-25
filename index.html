@@ -1759,32 +1759,134 @@ window.APP_ROLE = 'readonly';
 window.APP_IS_ADMIN = false;
 window.MY_PLAYER_ID = null;
 
-// ─── Supabase Sync ────────────────────────────────────────────
-function setSyncStatus(type, msg) {
-    const el = document.getElementById('sync-indicator');
-    if (!el) return;
-    el.textContent = msg;
-    el.className = type;
+// ═══════════════════════════════════════════════════════════════
+// SUPABASE WRITE QUEUE — verhindert Race Conditions
+// Alle Schreiboperationen laufen sequentiell durch eine Queue.
+// Jede Operation liest den aktuellen DB-State, merged ihre Änderung
+// rein und schreibt zurück. Niemals überschreibt eine Operation
+// die Änderungen einer anderen.
+// ═══════════════════════════════════════════════════════════════
+let _writeQueue = Promise.resolve();
+
+function _queueWrite(mergeFn, label) {
+    _writeQueue = _writeQueue.then(async () => {
+        setSyncStatus('saving', '💾 Speichern...');
+        try {
+            // Immer frischen State aus DB lesen
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+            });
+            if (!res.ok) throw new Error('Fetch failed: ' + res.status);
+            const rows = await res.json();
+            if (!rows || !rows[0]) throw new Error('No data in DB');
+
+            // Merge-Funktion wendet Änderungen auf frischen DB-State an
+            const dbData = rows[0].data || {};
+            mergeFn(dbData);
+
+            // Zurückschreiben
+            const patch = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+                    'Content-Type': 'application/json', 'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({ data: dbData, updated_at: new Date().toISOString() })
+            });
+            if (!patch.ok) throw new Error('Patch failed: ' + patch.status);
+            setSyncStatus('saved', '✓ Gespeichert');
+        } catch(e) {
+            console.error(`Write failed [${label}]:`, e);
+            setSyncStatus('error', '⚠ Fehler beim Speichern');
+        }
+    });
+    return _writeQueue;
 }
 
+// Hauptfunktion: speichert den kompletten lokalen state
 async function _syncToSupabase() {
-    setSyncStatus('saving', '💾 Speichern...');
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
-            method: 'PATCH',
-            headers: {
-                'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json', 'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({ data: state, updated_at: new Date().toISOString() })
-        });
-        if (res.ok) setSyncStatus('saved', '✓ Gespeichert');
-        else throw new Error('HTTP ' + res.status);
-    } catch(e) {
-        console.error('Save failed:', e);
-        setSyncStatus('error', '⚠ Fehler beim Speichern');
-    }
+    const snapshot = JSON.parse(JSON.stringify(state)); // Snapshot für diese Operation
+    return _queueWrite(dbData => {
+        // Vollständigen state überschreiben, aber partielle Felder anderer
+        // User (mvpVotes, duels, playerCards, playerProfiles) aus DB behalten
+        // falls sie neuer sind — dafür mergen wir tief
+        Object.assign(dbData, snapshot);
+        // Felder die andere User schreiben könnten: aus DB-Version behalten
+        // wenn der lokale state sie nicht kennt oder sie gleich alt sind
+        if (snapshot.mvpVotes) dbData.mvpVotes = _deepMergeVotes(dbData.mvpVotes || {}, snapshot.mvpVotes);
+        if (snapshot.duels) dbData.duels = Object.assign({}, dbData.duels || {}, snapshot.duels);
+        if (snapshot.playerCards) dbData.playerCards = Object.assign({}, dbData.playerCards || {}, snapshot.playerCards);
+        if (snapshot.playerProfiles) dbData.playerProfiles = Object.assign({}, dbData.playerProfiles || {}, snapshot.playerProfiles);
+    }, 'fullState');
 }
+
+// Merged MVP-Votes: addiert neue Stimmen statt zu überschreiben
+function _deepMergeVotes(dbVotes, localVotes) {
+    const result = Object.assign({}, dbVotes);
+    Object.entries(localVotes).forEach(([gameId, localData]) => {
+        if (!result[gameId]) {
+            result[gameId] = localData;
+        } else {
+            // Voters-Liste: Union
+            const dbVoters = result[gameId].voters || [];
+            const localVoters = localData.voters || [];
+            result[gameId].voters = [...new Set([...dbVoters, ...localVoters])];
+            // Votes: nehme den höheren Wert pro Spieler (sichert gegen Verlust)
+            const dbV = result[gameId].votes || {};
+            const localV = localData.votes || {};
+            const allKeys = new Set([...Object.keys(dbV), ...Object.keys(localV)]);
+            result[gameId].votes = {};
+            allKeys.forEach(k => {
+                result[gameId].votes[k] = Math.max(dbV[k] || 0, localV[k] || 0);
+            });
+        }
+    });
+    return result;
+}
+
+// MVP Vote: nur mvpVotes patchen
+async function _syncMvpVote() {
+    const votesSnapshot = JSON.parse(JSON.stringify(state.mvpVotes));
+    return _queueWrite(dbData => {
+        dbData.mvpVotes = _deepMergeVotes(dbData.mvpVotes || {}, votesSnapshot);
+    }, 'mvpVote').then(() => true).catch(() => false);
+}
+
+// Duell: nur duels patchen
+async function _saveDuelToState() {
+    const duelKey = _duel?.key;
+    const duelVotes = _duel ? { ..._duel.votes } : null;
+    if (!duelKey || !duelVotes) return;
+    return _queueWrite(dbData => {
+        if (!dbData.duels) dbData.duels = {};
+        dbData.duels[duelKey] = duelVotes;
+    }, 'duel');
+}
+
+// Spielerkarte: nur playerCards patchen
+async function _utMergeCardIntoMainState(playerId, card) {
+    return _queueWrite(dbData => {
+        if (!dbData.playerCards) dbData.playerCards = {};
+        dbData.playerCards[playerId] = card;
+    }, 'playerCard');
+}
+
+// Profil: nur playerProfiles patchen
+window.saveProfile = async function() {
+    const playerId = window.MY_PLAYER_ID;
+    if (!playerId) return;
+    if (!state.playerProfiles) state.playerProfiles = {};
+    state.playerProfiles[playerId] = {
+        number: document.getElementById('mk-number')?.value || '',
+        nationality: document.getElementById('mk-nationality')?.value || '',
+        foot: window._currentFoot || null,
+    };
+    const profileSnapshot = { ...state.playerProfiles[playerId] };
+    return _queueWrite(dbData => {
+        if (!dbData.playerProfiles) dbData.playerProfiles = {};
+        dbData.playerProfiles[playerId] = profileSnapshot;
+    }, 'profile');
+};
 
 // ─── Login ────────────────────────────────────────────────────
 window.sendMagicLink = async function() {
@@ -4079,28 +4181,6 @@ async function _utCardRowExists(playerId) {
     } catch { return false; }
 }
 
-async function _utMergeCardIntoMainState(playerId, card) {
-    // Read current main state, merge card, write back — using anon key (public read/write on app_state)
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        const rows = await res.json();
-        if (!rows || !rows[0]) return;
-        const data = rows[0].data;
-        if (!data.playerCards) data.playerCards = {};
-        data.playerCards[playerId] = card;
-        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
-            method: 'PATCH',
-            headers: {
-                'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json', 'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
-        });
-    } catch(e) { console.error('Merge card into state failed:', e); }
-}
-
 function _renderMkUtCard() {
     const container = document.getElementById('mk-ut-card-container');
     if (!container || !window.MY_PLAYER_ID) return;
@@ -4219,34 +4299,6 @@ window.voteForMvp = async function(gameId, playerId) {
 
     _mvpVoting = false;
 };
-
-async function _syncMvpVote() {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        if (!res.ok) throw new Error('Fetch failed');
-        const rows = await res.json();
-        if (!rows || !rows[0]) throw new Error('No data');
-        const dbData = rows[0].data;
-        dbData.mvpVotes = state.mvpVotes;
-        const patch = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
-            method: 'PATCH',
-            headers: {
-                'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json', 'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({ data: dbData, updated_at: new Date().toISOString() })
-        });
-        if (!patch.ok) throw new Error('Patch failed');
-        setSyncStatus('saved', '✓ Stimme gespeichert');
-        return true;
-    } catch(e) {
-        console.error('MVP vote sync failed:', e);
-        setSyncStatus('error', '⚠ Fehler beim Speichern');
-        return false;
-    }
-}
 
 function utMvpCountdown(deadline) {
     const diff = deadline - new Date();
@@ -4543,28 +4595,6 @@ window.undoDuel = async function() {
     renderDuel();
     _saveDuelToState();
 };
-
-async function _saveDuelToState() {
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        const rows = await res.json();
-        if (!rows || !rows[0]) return;
-        const data = rows[0].data;
-        if (!data.duels) data.duels = {};
-        data.duels[_duel.key] = { ..._duel.votes };
-        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
-            method: 'PATCH',
-            headers: {
-                'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json', 'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
-        });
-        setSyncStatus('saved', '✓ Gespeichert');
-    } catch(e) { console.error('Duel save error:', e); }
-}
 
 function renderDuel() {
     const container = document.getElementById('duel-container');
@@ -4946,36 +4976,6 @@ window.setFoot = function(foot) {
     _updateFootButtons(foot);
     window.saveProfile();
 };
-
-window.saveProfile = async function() {
-    const playerId = window.MY_PLAYER_ID;
-    if (!playerId) return;
-    if (!state.playerProfiles) state.playerProfiles = {};
-    state.playerProfiles[playerId] = {
-        number: document.getElementById('mk-number')?.value || '',
-        nationality: document.getElementById('mk-nationality')?.value || '',
-        foot: window._currentFoot || null,
-    };
-    // Save directly to Supabase state (works for all roles)
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main&select=data`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        });
-        const rows = await res.json();
-        if (!rows || !rows[0]) return;
-        const data = rows[0].data;
-        if (!data.playerProfiles) data.playerProfiles = {};
-        data.playerProfiles[playerId] = state.playerProfiles[playerId];
-        await fetch(`${SUPABASE_URL}/rest/v1/app_state?id=eq.main`, {
-            method: 'PATCH',
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ data, updated_at: new Date().toISOString() })
-        });
-        setSyncStatus('saved', '✓ Gespeichert');
-    } catch(e) { console.error('Profile save error:', e); }
-};
-
 
 // ═══════════════════════════════════════════════════════════════
 //  BEERPONG LIGA MODULE
