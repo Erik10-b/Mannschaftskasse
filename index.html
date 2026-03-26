@@ -1759,6 +1759,14 @@ window.APP_ROLE = 'readonly';
 window.APP_IS_ADMIN = false;
 window.MY_PLAYER_ID = null;
 
+// ─── Sync Status ──────────────────────────────────────────────
+function setSyncStatus(type, msg) {
+    const el = document.getElementById('sync-indicator');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = type;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // SUPABASE WRITE QUEUE — verhindert Race Conditions
 // Alle Schreiboperationen laufen sequentiell durch eine Queue.
