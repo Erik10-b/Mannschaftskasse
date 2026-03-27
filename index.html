@@ -1715,7 +1715,7 @@
             <ul class="nav-links">
                 <li class="active" data-target="dashboard"><span class="icon">📊</span><span
                         class="text">Dashboard</span></li>
-                <li data-target="spieler"><span class="icon">👥</span><span class="text">Spieler</span></li>
+                <li data-target="spieler"><span class="icon">👥</span><span class="text">Spieler</span><span id="nav-spieler-badge" style="display:none; font-size:0.65rem; padding:1px 6px; background:rgba(245,158,11,0.2); border:1px solid rgba(245,158,11,0.4); border-radius:10px; color:#fbbf24; margin-left:auto;">🔧</span></li>
                 <li data-target="spiele"><span class="icon">🏟️</span><span class="text">Spiele</span></li>
                 <li data-target="beitraege"><span class="icon">💶</span><span class="text">Beiträge</span></li>
                 <li data-target="strafen"><span class="icon">⚖️</span><span class="text">Strafen</span></li>
@@ -1884,26 +1884,39 @@
                 <!-- Spieler -->
                 <section id="spieler" class="section hidden">
 
-                    <!-- Duell -->
-                    <div class="card glass-panel" style="margin-bottom:0;">
-                        <div class="section-header">
-                            <h2>⚔️ Wer ist besser?</h2>
-                            <button class="btn btn-outline btn-small" onclick="window.newDuel()">🎲 Neues Duell</button>
-                        </div>
-                        <div id="duel-container"
-                            style="display:flex; align-items:center; justify-content:center; gap:24px; flex-wrap:wrap; padding:8px 0;">
-                            <p style="color:var(--text-muted);">Klicke auf "Neues Duell" um zwei Spieler zu vergleichen.
-                            </p>
-                        </div>
+                    <!-- Wartungs-Overlay fuer Nicht-Admins -->
+                    <div id="spieler-maintenance" class="card glass-panel" style="display:none; text-align:center; padding:60px 24px;">
+                        <div style="font-size:3.5rem; margin-bottom:20px;">🔧</div>
+                        <h2 style="font-size:1.4rem; font-weight:700; color:var(--text-main); margin-bottom:12px;">Wartungsarbeiten</h2>
+                        <p style="color:var(--text-muted); font-size:0.95rem; max-width:340px; margin:0 auto; line-height:1.6;">
+                            Der Spieler-Bereich wird gerade überarbeitet und ist vorübergehend nicht verfügbar.<br>
+                            <span style="color:#fbbf24; font-size:0.85rem; margin-top:8px; display:block;">Bald wieder online ⚽</span>
+                        </p>
                     </div>
 
-                    <!-- UT KARTEN -->
-                    <div class="card glass-panel" style="margin-top:0;">
-                        <div class="section-header">
-                            <h2>⚽ Spieler-Karten</h2>
-                            <button class="btn btn-primary edit-only" id="btn-add-player">+ Neuer Spieler</button>
+                    <!-- Echter Inhalt nur fuer Admin -->
+                    <div id="spieler-content">
+                        <!-- Duell -->
+                        <div class="card glass-panel" style="margin-bottom:0;">
+                            <div class="section-header">
+                                <h2>⚔️ Wer ist besser?</h2>
+                                <button class="btn btn-outline btn-small" onclick="window.newDuel()">🎲 Neues Duell</button>
+                            </div>
+                            <div id="duel-container"
+                                style="display:flex; align-items:center; justify-content:center; gap:24px; flex-wrap:wrap; padding:8px 0;">
+                                <p style="color:var(--text-muted);">Klicke auf "Neues Duell" um zwei Spieler zu vergleichen.
+                                </p>
+                            </div>
                         </div>
-                        <div id="ut-cards-grid" class="ut-cards-grid"></div>
+
+                        <!-- UT KARTEN -->
+                        <div class="card glass-panel" style="margin-top:0;">
+                            <div class="section-header">
+                                <h2>⚽ Spieler-Karten</h2>
+                                <button class="btn btn-primary edit-only" id="btn-add-player">+ Neuer Spieler</button>
+                            </div>
+                            <div id="ut-cards-grid" class="ut-cards-grid"></div>
+                        </div>
                     </div>
                 </section>
 
@@ -2986,6 +2999,10 @@
             if (nutzerNav) nutzerNav.style.display = role === 'admin' ? '' : 'none';
             const mkNav = document.getElementById('nav-meinkonto');
             if (mkNav) mkNav.style.display = playerId ? '' : 'none';
+            // Wartungs-Badge im Nav anzeigen fuer Nicht-Admins
+            const spielerBadge = document.getElementById('nav-spieler-badge');
+            if (spielerBadge) spielerBadge.style.display = (role !== 'admin') ? '' : 'none';
+
             const logoutNav = document.getElementById('nav-logout');
             const session = JSON.parse(localStorage.getItem('mkasse_session') || '{}');
             if (logoutNav) logoutNav.style.display = session.email ? '' : 'none';
@@ -3329,23 +3346,16 @@
                 const rows = await res.json();
                 if (rows && rows.length > 0 && rows[0] && rows[0].data && rows[0].data.players) {
                     const loaded = rows[0].data;
-                    // WICHTIG: DB-Daten haben immer Vorrang vor MASTER_STATE!
-                    // Nur Felder die in der DB FEHLEN werden aus MASTER_STATE genommen.
-                    // NICHT: Object.assign(MASTER_STATE, loaded) — das würde DB-Daten überschreiben!
-                    state = loaded;
-                    // Fehlende Felder aus MASTER_STATE ergänzen (nur wenn wirklich nicht vorhanden)
-                    if (!state.players || !Array.isArray(state.players) || state.players.length === 0) state.players = MASTER_STATE.players;
+                    // Fehlende Felder aus MASTER_STATE ergänzen (sichert gegen leere/neue Felder ab)
+                    state = Object.assign({}, JSON.parse(JSON.stringify(MASTER_STATE)), loaded);
+                    // Kritische Arrays/Objekte sichern
+                    if (!state.players || !Array.isArray(state.players)) state.players = MASTER_STATE.players;
                     if (!state.transactions || !Array.isArray(state.transactions)) state.transactions = [];
                     if (!state.guests || !Array.isArray(state.guests)) state.guests = [];
-                    if (!state.fineTypes || !Array.isArray(state.fineTypes) || state.fineTypes.length === 0) state.fineTypes = MASTER_STATE.fineTypes;
-                    if (!state.feeTypes || !Array.isArray(state.feeTypes) || state.feeTypes.length === 0) state.feeTypes = MASTER_STATE.feeTypes;
-                    if (!state.drinkTypes || !Array.isArray(state.drinkTypes) || state.drinkTypes.length === 0) state.drinkTypes = MASTER_STATE.drinkTypes;
-                    if (!state.monthlyFees || typeof state.monthlyFees !== 'object' || Object.keys(state.monthlyFees).length === 0) state.monthlyFees = MASTER_STATE.monthlyFees;
-                    if (!state.games) state.games = [];
-                    if (!state.mvpVotes) state.mvpVotes = {};
-                    if (!state.duels) state.duels = {};
-                    if (!state.playerCards) state.playerCards = {};
-                    if (!state.playerProfiles) state.playerProfiles = {};
+                    if (!state.fineTypes || !Array.isArray(state.fineTypes)) state.fineTypes = MASTER_STATE.fineTypes;
+                    if (!state.feeTypes || !Array.isArray(state.feeTypes)) state.feeTypes = MASTER_STATE.feeTypes;
+                    if (!state.drinkTypes || !Array.isArray(state.drinkTypes)) state.drinkTypes = MASTER_STATE.drinkTypes;
+                    if (!state.monthlyFees || typeof state.monthlyFees !== 'object') state.monthlyFees = MASTER_STATE.monthlyFees;
                     setSyncStatus('saved', '✓ Aktuell');
                     // Einmalige Fixes: doppelte Zahlungen + Robin Janssen
                     localStorage.removeItem('bp_payment_cleanup_v1');
@@ -3493,7 +3503,7 @@
             if (target === 'nutzer') window.loadNutzer();
             if (target === 'meinkonto') window.loadMeinKonto();
             if (target === 'spiele') renderGames();
-            if (target === 'spieler') { if (!_duel) window.newDuel(); }
+            if (target === 'spieler') { window._initSpielerSection(); }
             if (target === 'ranking') renderRanking();
             if (target === 'beerpong') { try { window._bpTabOpened && window._bpTabOpened(); } catch (e) { } }
             _updateMobileNavActive();
@@ -3523,6 +3533,16 @@
             if (el) el.textContent = formatCurrency(getTotalFund());
         }
 
+        // ── Spieler-Section: Maintenance vs. Content ────────────────────
+        window._initSpielerSection = function() {
+            const isAdmin = window.APP_IS_ADMIN;
+            const maintenance = document.getElementById('spieler-maintenance');
+            const content = document.getElementById('spieler-content');
+            if (maintenance) maintenance.style.display = isAdmin ? 'none' : '';
+            if (content) content.style.display = isAdmin ? '' : 'none';
+            if (isAdmin && !_duel) window.newDuel();
+        };
+
         // ── Navigation ───────────────────────────────────────────────────────────────
         document.querySelectorAll('.nav-links li').forEach(link => {
             link.addEventListener('click', (e) => {
@@ -3538,7 +3558,7 @@
                 if (targetId === 'nutzer') window.loadNutzer();
                 if (targetId === 'meinkonto') window.loadMeinKonto();
                 if (targetId === 'spiele') renderGames();
-                if (targetId === 'spieler') { if (!_duel) window.newDuel(); }
+                if (targetId === 'spieler') { window._initSpielerSection(); }
                 if (targetId === 'ranking') renderRanking();
                 if (targetId === 'beerpong') { try { window._bpTabOpened && window._bpTabOpened(); } catch (e) { } }
             });
